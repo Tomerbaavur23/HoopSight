@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pickwise</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: one working column. Summary strip on top, roster cards in a two-up grid, each card holds that player's games for the week as selectable chips. */
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --ink: #141a24;
+  --muted: #5d6878;
+  --line: #dbe0e8;
+  --accent: #d9480f;
+  --accent-soft: #fdeee6;
+  --ok: #1f7a4d;
+  --watch: #a86400;
+  --out: #b42318;
+  --out-soft: #fdeceb;
+  --watch-soft: #fdf3e0;
+  --ok-soft: #e6f4ec;
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e131b;
+    --surface: #161d28;
+    --ink: #eaeef4;
+    --muted: #97a3b5;
+    --line: #2a3445;
+    --accent: #ff8a4c;
+    --accent-soft: #2e1d14;
+    --ok: #5fd39b;
+    --watch: #f0b24b;
+    --out: #ff8a80;
+    --out-soft: #331a18;
+    --watch-soft: #2e2412;
+    --ok-soft: #14291f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e131b;
+  --surface: #161d28;
+  --ink: #eaeef4;
+  --muted: #97a3b5;
+  --line: #2a3445;
+  --accent: #ff8a4c;
+  --accent-soft: #2e1d14;
+  --ok: #5fd39b;
+  --watch: #f0b24b;
+  --out: #ff8a80;
+  --out-soft: #331a18;
+  --watch-soft: #2e2412;
+  --ok-soft: #14291f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-block: 20px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; }
+.num { font-variant-numeric: tabular-nums; }
+
+.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+.brand { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+.brand small { font-family: var(--font-body); font-size: 14px; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-left: 10px; }
+.weekpill { font-size: 13px; font-weight: 600; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+
+.tonight { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 10px; padding: 12px 14px; }
+.tonight strong { font-family: var(--font-display); }
+.tonight p { margin: 4px 0 0; color: var(--ink); }
+
+.summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.stat .label { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.stat .value { font-family: var(--font-display); font-size: 30px; font-weight: 700; margin-top: 2px; }
+.stat .sub { font-size: 13px; color: var(--muted); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.btn { background: var(--ink); color: var(--bg); border: 0; border-radius: 8px; padding: 8px 14px; font-weight: 600; }
+.btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+details.settings { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 14px; }
+details.settings summary { cursor: pointer; padding: 12px 0; font-weight: 600; font-family: var(--font-display); }
+.settings-body { padding-bottom: 14px; display: flex; flex-direction: column; gap: 14px; }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px; }
+.field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); font-weight: 500; }
+.field input { font: inherit; font-size: 15px; width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+.hint { font-size: 13px; color: var(--muted); margin: 0; }
+
+h2.group { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; gap: 12px; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } .summary { grid-template-columns: minmax(0, 1fr); } }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.card.out { background: var(--surface); }
+.head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.name { font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+.meta { font-size: 13px; color: var(--muted); }
+.chip { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.chip.ok { color: var(--ok); background: var(--ok-soft); }
+.chip.watch { color: var(--watch); background: var(--watch-soft); }
+.chip.out { color: var(--out); background: var(--out-soft); }
+.statusnote { font-size: 13px; color: var(--muted); margin: 0; }
+
+.games { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
+.game { text-align: left; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; position: relative; }
+.game:hover { border-color: var(--muted); }
+.game .when { font-size: 12px; color: var(--muted); font-weight: 600; }
+.game .vs { font-weight: 600; }
+.game .pts { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+.game .bar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 2px; }
+.game .bar i { display: block; height: 100%; background: var(--muted); }
+.game .tag { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; min-height: 14px; color: var(--muted); }
+.game.rec { border-color: var(--accent); background: var(--accent-soft); }
+.game.rec .bar i { background: var(--accent); }
+.game.rec .tag { color: var(--accent); }
+.game.mine { box-shadow: inset 0 0 0 2px var(--ink); }
+.game.past { opacity: 0.55; }
+.why { font-size: 13px; color: var(--muted); margin: 0; }
+.why b { color: var(--ink); font-weight: 600; }
+
+details.benchbox { margin-top: 4px; }
+details.benchbox summary { cursor: pointer; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; font-family: var(--font-display); padding: 10px 0 14px; }
+.foot { font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 16px; }
+.foot p { margin: 0; max-width: 78ch; }
+@media (prefers-reduced-motion: no-preference) { .game { transition: border-color .12s; } }
+.matchup { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.mu-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px; }
+.mu-head h2 { font-size: 18px; }
+.mu-odds { font-family: var(--font-display); font-size: 34px; font-weight: 700; line-height: 1.1; }
+.mu-odds small { font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 8px; }
+.mu-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+@media (max-width: 760px) { .mu-cols { grid-template-columns: minmax(0, 1fr); } }
+.mu-col h3 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; display: flex; justify-content: space-between; gap: 8px; }
+table.mu { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.mu th { text-align: left; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 4px 4px; border-bottom: 1px solid var(--line); }
+table.mu td { padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.mu th.r, table.mu td.r { text-align: right; }
+table.mu tr.off td { opacity: 0.45; text-decoration: line-through; }
+table.mu label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+table.mu input[type="checkbox"] { margin-top: 3px; accent-color: var(--accent); }
+.mu-sub { font-size: 12px; color: var(--muted); }
+.mu-advice { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); border: 1px solid var(--accent); font-size: 14px; }
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header class="top">
+    <h1 class="brand">Pickwise<small>Weekly game picks for your Sleeper league</small></h1>
+    <span class="weekpill" id="weekpill">Week 5 · Nov 16 to 22</span>
+  </header>
+
+  <section class="tonight" id="tonight" aria-live="polite"></section>
+
+  <section class="summary" aria-label="Week summary">
+    <div class="stat"><div class="label">Projected at recommended picks</div><div class="value num" id="sumRec">0</div><div class="sub" id="sumRecSub"></div></div>
+    <div class="stat"><div class="label">Projected at your picks</div><div class="value num" id="sumMine">0</div><div class="sub" id="sumMineSub"></div></div>
+    <div class="stat"><div class="label">Difference</div><div class="value num" id="sumDiff">0</div><div class="sub">your picks minus recommended</div></div>
+  </section>
+  <div class="actions">
+    <button class="btn" id="useRec" type="button">Use all recommended picks</button>
+    <button class="btn ghost" id="clearPicks" type="button">Clear my picks</button>
+    <span class="hint">Tap a game to mark it as your pick. Picks stay in this browser only.</span>
+  </div>
+
+  <section class="matchup" id="matchup" aria-label="Matchup"></section>
+
+  <details class="settings">
+    <summary>Scoring and model settings</summary>
+    <div class="settings-body">
+      <p class="hint">Scoring starts from your Sleeper settings. Change any value and every projection updates.</p>
+      <div class="fields" id="scoreFields"></div>
+      <div class="fields">
+        <label class="field" for="margin">Lock early only if better by (pts)
+          <input id="margin" type="number" step="0.25" min="0" value="0.75"></label>
+      </div>
+      <label class="field" for="risk" style="flex-direction:row;align-items:center;gap:8px;font-size:14px;color:var(--ink)"><input id="risk" type="checkbox" style="width:auto">Experimental: discount later games by each player's miss rate</label>
+      <p class="hint">Off by default. This season, 6 of the 8 games your players missed were the last game of their week. Turning this on lowers the projection of later games for players who miss games often, so the pick moves earlier. Tested on only 25 player-weeks, so use it as a second opinion.</p>
+      <p class="hint">When a later game is within this margin of the top projection, the recommendation holds the later game. Waiting brings more injury and rest news before you are locked in.</p>
+    </div>
+  </details>
+
+  <div id="groups"></div>
+
+  <footer class="foot">
+    <p><b>How a projection is built.</b> Season-to-date per-game stat line, turned into fantasy points with your scoring, then adjusted for opponent scoring defense, game pace, home court, and back-to-backs (a bigger cut for players aged 35 and over).</p>
+    <p><b>Not in this version.</b> Rotation changes from injuries, blowout risk, player-by-player variance, and betting lines. Only the five teams that allow the most and the fewest points are adjusted; all other opponents count as average. Double-double and bonus frequencies are my estimates from recent games. Technical and flagrant fouls are ignored.</p>
+    <p><b>Sources.</b> Schedule, back-to-backs, pace and points allowed from FantasySixPack (week 5 planner, data through Nov 9). Player lines and injury notes from ESPN, Basketball Reference, RotoBaller, FantasyData, CBS Sports and team reports, read on Nov 16. Check the official injury report before each tip-off.</p>
+    <p><b>Matchup.</b> Game logs from ESPN through Nov 15 and the NBA's published schedule (as of Aug 13, subject to change). Your starters' averages come from the FPTS column in Sleeper's game logs; the opponent's come from ESPN logs, which can lag a few days. LeBron has missed 3 of 14 games and Podziemski 2 of 13, so untick them if they are out. Kelly Oubre Jr. has played only 5 games this season, so his average is thin.</p>
+  </footer>
+</div>
+
+<script>
+/*MODEL*/
+var DEFAULT_W = { pts: 0.5, reb: 1, ast: 1, stl: 2, blk: 2, tov: -1, ftm: 0.2, tpm: 0.5 };
+var DEFAULT_B = { dd: 2.5, td: 4, p40: 2, p50: 3, a15: 2, r20: 2 };
+var OPP_PPG = { CHI: 129.3, SAC: 122.4, MIL: 121.6, MIA: 121.1, NO: 120.8, DET: 103.9, OKC: 104.2, NY: 104.2, BOS: 104.3, MIN: 107.0 };
+var PACE = { CHI: 106.9, ATL: 105.1, MIA: 104.1, TOR: 103.9, NO: 103.2, CHA: 97.5, BOS: 97.7, NY: 98.4, DEN: 98.8, HOU: 99.4 };
+var LG_PPG = 114.0, LG_PACE = 101.0, K_DEF = 0.5, K_PACE = 0.4, HOME = 0.015, B2B = 0.03, B2B_OLD = 0.10;
+
+function baseFp(line, W, B) {
+  var s = 0, k;
+  for (k in W) s += W[k] * line[k];
+  for (k in B) s += B[k] * line[k];
+  return s;
+}
+function adjust(team, g, age) {
+  var d = 1 + K_DEF * (((OPP_PPG[g.opp] || LG_PPG) - LG_PPG) / LG_PPG);
+  var gp = ((PACE[team] || LG_PACE) + (PACE[g.opp] || LG_PACE)) / 2;
+  var pc = 1 + K_PACE * (gp / LG_PACE - 1);
+  var h = g.home ? 1 + HOME : 1 - HOME;
+  var r = g.b2b ? 1 - (age >= 35 ? B2B_OLD : B2B) : 1;
+  return { mult: d * pc * h * r, d: d, pc: pc, h: h, r: r };
+}
+function pickGames(rows, margin) {
+  var top = rows.reduce(function (a, b) { return b.proj > a.proj ? b : a; });
+  var rec = top;
+  rows.forEach(function (g) { if (g.proj >= top.proj - margin && g.order > rec.order) rec = g; });
+  return { top: top, rec: rec };
+}
+/*ENDMODEL*/
+
+var DAYS = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+function G(day, date, opp, home, b2b, tip) { return { day: day, date: date, opp: opp, home: home, b2b: b2b, tip: tip || "", order: DAYS[day] }; }
+
+var SCHED = {
+  CLE: [G("Mon","11/16","CHI",1,0,"7:00"), G("Wed","11/18","MEM",1,0), G("Fri","11/20","IND",1,0)],
+  HOU: [G("Mon","11/16","MIA",0,1,"7:30"), G("Wed","11/18","IND",0,0), G("Fri","11/20","DEN",0,0)],
+  GS:  [G("Mon","11/16","NO",0,0,"8:00"), G("Wed","11/18","DAL",0,0), G("Thu","11/19","MEM",0,1), G("Sun","11/22","BOS",1,0)],
+  PHI: [G("Mon","11/16","BKN",0,1,"7:30"), G("Wed","11/18","ORL",0,0), G("Sat","11/21","MIL",1,0)],
+  MIA: [G("Mon","11/16","HOU",1,0,"7:30"), G("Wed","11/18","MIL",1,0), G("Sun","11/22","OKC",1,0)],
+  MEM: [G("Mon","11/16","WAS",0,0,"7:00"), G("Wed","11/18","CLE",0,0), G("Thu","11/19","GS",1,1), G("Sat","11/21","MIN",0,0)],
+  SAC: [G("Wed","11/18","PHX",1,0), G("Fri","11/20","LAL",0,0), G("Sat","11/21","BOS",1,1)],
+  OKC: [G("Wed","11/18","ATL",1,0), G("Fri","11/20","NO",1,0), G("Sun","11/22","MIA",0,0)],
+  TOR: [G("Tue","11/17","NY",1,0), G("Wed","11/18","WAS",1,1), G("Fri","11/20","DET",0,0)],
+  NO:  [G("Mon","11/16","GS",1,0,"8:00"), G("Wed","11/18","DET",1,0), G("Fri","11/20","OKC",0,0), G("Sat","11/21","SA",0,1)],
+  DET: [G("Tue","11/17","SA",0,0), G("Wed","11/18","NO",0,1), G("Fri","11/20","TOR",1,0), G("Sun","11/22","ATL",0,0)],
+  CHI: [G("Mon","11/16","CLE",0,0,"7:00"), G("Wed","11/18","BKN",0,0), G("Fri","11/20","WAS",1,0), G("Sun","11/22","DEN",1,0)]
+};
+
+function L(pts, reb, ast, stl, blk, tov, tpm, ftm, dd, td, p40, p50, a15, r20) {
+  return { pts: pts, reb: reb, ast: ast, stl: stl, blk: blk, tov: tov, tpm: tpm, ftm: ftm, dd: dd, td: td, p40: p40, p50: p50, a15: a15, r20: r20 };
+}
+var PLAYERS = [
+  { name: "Donovan Mitchell", team: "CLE", pos: "G", age: 30, slot: "starter", st: ["ok", "Healthy."], line: L(22.6,5.2,5.8,1.2,0.4,3.0,2.7,4.6,.08,0,.03,0,.01,0) },
+  { name: "Amen Thompson", team: "HOU", pos: "G/F", age: 23, slot: "starter", st: ["ok", "Healthy. Monday is the second night of a back-to-back."], line: L(18.5,7.8,4.8,1.3,0.5,2.3,0.4,3.6,.30,.03,0,0,0,0) },
+  { name: "Brandin Podziemski", team: "GS", pos: "G", age: 23, slot: "starter", st: ["watch", "Back soreness earlier this season. Check the report before tip-off."], line: L(16.8,5.0,4.2,1.2,0.6,1.8,2.2,2.3,.05,0,0,0,0,0) },
+  { name: "LeBron James", team: "PHI", pos: "F", age: 42, slot: "starter", st: ["watch", "Age 42 with a back-to-back Monday. Rest is likely on the second night."], line: L(15.1,7.2,6.5,1.3,0.7,2.7,0.9,2.8,.25,.04,0,0,.01,0) },
+  { name: "Giannis Antetokounmpo", team: "MIA", pos: "F", age: 32, slot: "starter", st: ["watch", "Right wrist sprain, listed probable then questionable last week. Confirm status."], line: L(28.9,12.5,5.2,0.8,1.2,3.4,0.6,5.7,.85,.06,.10,.01,0,.04) },
+  { name: "Cameron Boozer", team: "MEM", pos: "F", age: 19, slot: "starter", st: ["ok", "Healthy."], line: L(16.5,9.8,5.4,1.0,0.6,2.7,1.3,4.9,.45,.04,0,0,0,0) },
+  { name: "Domantas Sabonis", team: "SAC", pos: "C", age: 30, slot: "starter", st: ["watch", "Left knee soreness. Reports conflict on whether he played Nov 10. Check before Wednesday."], line: L(13.8,13.3,5.9,0.8,0.1,3.1,0.2,2.6,.85,.10,0,0,0,.03) },
+  { name: "VJ Edgecombe", team: "PHI", pos: "G", age: 21, slot: "starter", st: ["ok", "Healthy."], line: L(15.0,5.5,4.2,1.4,0.5,1.9,2.0,2.2,.03,0,0,0,0,0) },
+  { name: "Isaiah Hartenstein", team: "OKC", pos: "C", age: 28, slot: "starter", st: ["ok", "Healthy. About 24 minutes a game."], line: L(9.5,9.2,2.0,0.8,0.7,1.5,0.0,1.6,.40,0,0,0,0,.01) },
+  { name: "Immanuel Quickley", team: "TOR", pos: "G", age: 27, slot: "bench", st: ["ok", "Active."], line: L(18.0,3.9,5.6,1.0,0.0,1.9,2.7,3.9,.03,0,0,0,0,0) },
+  { name: "Jeremiah Fears", team: "NO", pos: "G", age: 20, slot: "bench", st: ["ok", "Healthy."], line: L(14.5,4.4,4.9,1.0,0.5,2.5,1.1,2.4,.02,0,0,0,.02,0) },
+  { name: "Yves Missi", team: "NO", pos: "C", age: 22, slot: "bench", st: ["out", "Left knee bone bruise. Ruled out for 10 straight games through Nov 11, no return date."], line: L(9.5,7.5,2.5,1.0,2.0,1.5,0.0,1.5,.25,0,0,0,0,0) },
+  { name: "Daniss Jenkins", team: "DET", pos: "G", age: 25, slot: "bench", st: ["ok", "Healthy. Backup to Cade Cunningham."], line: L(12.7,3.6,4.7,0.8,0.1,2.1,2.1,2.2,.02,0,0,0,0,0) },
+  { name: "Caleb Wilson", team: "CHI", pos: "F", age: 20, slot: "injured", st: ["watch", "Right hip soreness, questionable on Nov 11. You have him in your injured slot."], line: L(21.6,6.7,2.7,2.0,1.3,3.0,1.0,5.6,.15,0,.02,0,0,0) }
+];
+
+var W = Object.assign({}, DEFAULT_W), B = Object.assign({}, DEFAULT_B), MARGIN = 0.75;
+var PICKS = {};
+var STORE_KEY = "pickwise-w5-picks";
+try { PICKS = JSON.parse(localStorage.getItem(STORE_KEY) || "{}") || {}; } catch (e) { PICKS = {}; }
+function savePicks() { try { localStorage.setItem(STORE_KEY, JSON.stringify(PICKS)); } catch (e) {} }
+
+var LABELS = { pts: "Point", reb: "Rebound", ast: "Assist", stl: "Steal", blk: "Block", tov: "Turnover", ftm: "Free throw made", tpm: "3-pointer made",
+  dd: "Double-double", td: "Triple-double", p40: "40+ points", p50: "50+ points", a15: "15+ assists", r20: "20+ rebounds" };
+
+function reasons(p, g, a) {
+  var out = [];
+  if (OPP_PPG[g.opp] && a.d > 1.02) out.push(g.opp + " allow " + OPP_PPG[g.opp] + " points a game, among the most in the league");
+  if (OPP_PPG[g.opp] && a.d < 0.985) out.push(g.opp + " allow only " + OPP_PPG[g.opp] + " points a game");
+  if (a.pc > 1.012) out.push("fast pace");
+  if (a.pc < 0.992) out.push("slow pace");
+  if (g.b2b) out.push("second night of a back-to-back");
+  return out;
+}
+
+/* games missed this season / games scheduled, from Sleeper game logs through Nov 15 */
+var MISS = { "Donovan Mitchell": [1, 14], "Amen Thompson": [0, 14], "Brandin Podziemski": [2, 13], "LeBron James": [3, 14], "Giannis Antetokounmpo": [0, 13],
+  "Cameron Boozer": [0, 13], "Domantas Sabonis": [1, 13], "VJ Edgecombe": [1, 14], "Isaiah Hartenstein": [0, 14] };
+var RISK = false, LG_MISS = 8 / 122;
+function missRate(p) { var m = MISS[p.name]; return m ? (m[0] + LG_MISS * 8) / (m[1] + 8) : LG_MISS; }
+function compute() {
+  PLAYERS.forEach(function (p) {
+    p.base = baseFp(p.line, W, B);
+    var nG = SCHED[p.team].length, mr = missRate(p);
+    p.rows = SCHED[p.team].map(function (g, gi) {
+      var a = adjust(p.team, g, p.age), why = reasons(p, g, a), k = 1;
+      if (RISK && nG > 1) { k = 1 - 2 * mr * gi / (nG - 1); if (gi > 0 && mr > 0.1) why.push("misses " + Math.round(mr * 100) + "% of games, more often late in the week"); }
+      return Object.assign({}, g, { proj: p.base * a.mult * k, why: why });
+    });
+    var sel = pickGames(p.rows, MARGIN);
+    p.top = sel.top;
+    p.rec = p.st[0] === "out" ? p.rows[p.rows.length - 1] : sel.rec;
+  });
+}
+function f1(x) { return (Math.round(x * 10) / 10).toFixed(1); }
+function key(p, g) { return g.date; }
+
+function render() {
+  compute();
+  var html = "";
+  [["starter", "Starters"], ["bench", "Bench"], ["injured", "Injured slot"]].forEach(function (grp) {
+    var list = PLAYERS.filter(function (p) { return p.slot === grp[0]; });
+    var isStart = grp[0] === "starter";
+    html += isStart ? '<h2 class="group"><span>Starters · pick a game for each</span><span>' + list.length + ' players</span></h2>' : '<details class="benchbox"><summary>' + grp[1] + ' · ' + list.length + ' players · no picks needed</summary>';
+    html += '<div class="grid" style="margin-bottom:20px">';
+    list.forEach(function (p) {
+      var idx = PLAYERS.indexOf(p);
+      var maxp = Math.max.apply(null, p.rows.map(function (g) { return g.proj; }));
+      var lbl = { ok: "Healthy", watch: "Watch", out: "Out" }[p.st[0]];
+      html += '<article class="card"><div class="head"><div><div class="name">' + p.name + '</div><div class="meta">' + p.team + ' · ' + p.pos + ' · ' + f1(p.base) + ' fantasy pts per game at your scoring' + (MISS[p.name] && MISS[p.name][0] > 0 ? ' · missed ' + MISS[p.name][0] + ' of ' + MISS[p.name][1] + ' games' : '') + '</div></div><span class="chip ' + p.st[0] + '">' + lbl + '</span></div>';
+      html += '<p class="statusnote">' + p.st[1] + '</p><div class="games">';
+      p.rows.forEach(function (g, gi) {
+        var isRec = g === p.rec, isMine = PICKS[p.name] === g.date;
+        var tag = isMine ? "Your pick" : (isRec ? (p.st[0] === "out" ? "Hold last game" : "Recommended") : (g.tip ? "Tonight " + g.tip + " ET" : ""));
+        if (isMine && isRec) tag = "Your pick ✓";
+        html += '<button type="button" class="game' + (isRec ? " rec" : "") + (isMine ? " mine" : "") + '" data-p="' + idx + '" data-g="' + gi + '" aria-pressed="' + isMine + '">' +
+          '<span class="when">' + g.day + ' ' + g.date + (g.tip && isRec ? ' · ' + g.tip + ' ET' : '') + '</span><span class="vs">' + (g.home ? 'vs ' : '@ ') + g.opp + '</span>' +
+          '<span class="pts num">' + f1(g.proj) + '</span><span class="bar"><i style="width:' + Math.max(8, Math.round(g.proj / maxp * 100)) + '%"></i></span><span class="tag">' + tag + '</span></button>';
+      });
+      html += '</div>';
+      var r = p.rec, t = p.top, w = (r.why.length ? r.why.join("; ") : "no standout edge, so the pick comes down to the schedule slot");
+      var note;
+      if (p.st[0] === "out") note = "<b>Out for now.</b> Keep the last game of the week selected in case he returns.";
+      else if (r === t) note = "<b>" + r.day + " " + (r.home ? "vs " : "@ ") + r.opp + " is the top projection:</b> " + w + ".";
+      else note = "<b>" + r.day + " " + (r.home ? "vs " : "@ ") + r.opp + "</b> is within " + f1(t.proj - r.proj) + " pts of the top projection (" + t.day + " " + (t.home ? "vs " : "@ ") + t.opp + "). Holding the later game keeps you flexible while news comes in.";
+      html += '<p class="why">' + note + '</p></article>';
+    });
+    html += '</div>' + (isStart ? '' : '</details>');
+  });
+  document.getElementById("groups").innerHTML = html;
+  summary();
+  tonight();
+}
+
+function summary() {
+  var rec = 0, mine = 0, set = 0, starters = PLAYERS.filter(function (p) { return p.slot === "starter" && p.st[0] !== "out"; });
+  starters.forEach(function (p) {
+    rec += p.rec.proj;
+    var m = PICKS[p.name];
+    if (m) { set++; var g = p.rows.filter(function (x) { return x.date === m; })[0]; if (g) mine += g.proj; }
+  });
+  document.getElementById("sumRec").textContent = f1(rec);
+  document.getElementById("sumRecSub").textContent = "sum for " + starters.length + " healthy starters, one game each";
+  document.getElementById("sumMine").textContent = set ? f1(mine) : "–";
+  document.getElementById("sumMineSub").textContent = set + " of " + starters.length + " starters set";
+  document.getElementById("sumDiff").textContent = set === starters.length ? ((mine - rec >= 0 ? "+" : "") + f1(mine - rec)) : "–";
+}
+
+function tonight() {
+  var sts = PLAYERS.filter(function (p) { return p.slot === "starter"; });
+  var lock = sts.filter(function (p) { return p.st[0] !== "out" && p.rec.order === 1; });
+  var monday = sts.filter(function (p) { return p.rows.some(function (g) { return g.order === 1; }); });
+  var el = document.getElementById("tonight");
+  var names = lock.map(function (p) { return p.name + " (" + (p.rec.home ? "vs " : "@ ") + p.rec.opp + ", " + p.rec.tip + " ET)"; });
+  el.innerHTML = '<strong>Monday games tip off tonight, 7:00 to 9:00 pm ET (2:00 to 4:00 am Tuesday in Israel).</strong>' +
+    '<p>' + (names.length ? 'Recommended to lock in Monday: ' + names.join(", ") + '. ' : 'No starter is recommended on a Monday game. ') +
+    'Everyone else is better held for a later game. ' + monday.length + ' of your ' + sts.length + ' starters have a Monday game, and a pick can no longer be changed once that game starts.</p>';
+}
+
+function buildFields() {
+  var h = "";
+  Object.keys(W).concat(Object.keys(B)).forEach(function (k) {
+    var v = (k in W) ? W[k] : B[k];
+    h += '<label class="field" for="w-' + k + '">' + LABELS[k] + '<input id="w-' + k + '" data-k="' + k + '" type="number" step="0.1" value="' + v + '"></label>';
+  });
+  document.getElementById("scoreFields").innerHTML = h;
+}
+
+document.addEventListener("click", function (e) {
+  var b = e.target.closest(".game");
+  if (!b) return;
+  var p = PLAYERS[+b.dataset.p], g = p.rows[+b.dataset.g];
+  if (PICKS[p.name] === g.date) delete PICKS[p.name]; else PICKS[p.name] = g.date;
+  savePicks(); render();
+});
+document.addEventListener("input", function (e) {
+  var k = e.target.dataset && e.target.dataset.k;
+  if (k) { var v = parseFloat(e.target.value); if (isNaN(v)) return; if (k in W) W[k] = v; else B[k] = v; render(); }
+  if (e.target.id === "margin") { var m = parseFloat(e.target.value); if (!isNaN(m) && m >= 0) { MARGIN = m; render(); } }
+});
+document.getElementById("useRec").addEventListener("click", function () {
+  PLAYERS.forEach(function (p) { if (p.slot === "starter" && p.st[0] !== "out") PICKS[p.name] = p.rec.date; });
+  savePicks(); render();
+});
+document.getElementById("clearPicks").addEventListener("click", function () { PICKS = {}; savePicks(); render(); });
+
+/* ---------- Matchup: win chance vs this week's opponent ---------- */
+/* mean and sd = fantasy points in a single game, from 2026-27 game logs through Nov 15 at league scoring.
+   Your starters' numbers are Sleeper's own FPTS column (11 to 14 games each). The opponent's are from ESPN logs. */
+var MU_US = [
+  ["Giannis Antetokounmpo", "MIA", "Mon, Wed, Sun", 36.6, 9.9, ""],
+  ["Domantas Sabonis", "SAC", "Wed, Fri, Sat", 27.3, 9.5, ""],
+  ["Donovan Mitchell", "CLE", "Mon, Wed, Fri", 25.0, 6.1, ""],
+  ["LeBron James", "PHI", "Mon, Wed, Sat", 24.7, 5.7, ""],
+  ["Cameron Boozer", "MEM", "Mon, Wed, Thu, Sat", 25.2, 6.9, ""],
+  ["Isaiah Hartenstein", "OKC", "Wed, Fri, Sun", 20.7, 6.7, ""],
+  ["Brandin Podziemski", "GS", "Mon, Wed, Thu, Sun", 21.0, 5.7, ""],
+  ["Amen Thompson", "HOU", "Mon, Wed, Fri", 21.6, 7.4, ""],
+  ["VJ Edgecombe", "PHI", "Mon, Wed, Sat", 20.5, 7.1, ""]
+];
+var MU_OPP = [
+  ["Jalen Brunson", "NY", "Tue, Thu, Sat, Sun", 24.1, 5.2, ""],
+  ["Damian Lillard", "POR", "Mon, Thu, Sat", 19.7, 5.6, ""],
+  ["De'Aaron Fox", "SA", "Tue, Thu, Sat", 19.4, 6.0, ""],
+  ["Kelly Oubre Jr.", "IND", "Wed, Fri, Sun", 11.0, 2.0, "5 games only"],
+  ["Michael Porter Jr.", "BKN", "Mon, Wed, Fri", 23.8, 7.0, ""],
+  ["Deni Avdija", "POR", "Mon, Thu, Sat", 26.6, 5.7, ""],
+  ["Victor Wembanyama", "SA", "Tue, Thu, Sat", 42.6, 15.1, ""],
+  ["Joel Embiid", "PHI", "Mon, Wed, Sat", 25.9, 8.6, ""],
+  ["Myles Turner", "MIL", "Wed, Thu, Sat", 16.9, 7.6, ""]
+];
+var MU_OFF = {};
+function phi(z) {
+  var t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2);
+  var p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+  return z > 0 ? 1 - p : p;
+}
+function muSide(list, side) {
+  var mean = 0, vr = 0, rows = "";
+  list.forEach(function (r, i) {
+    var id = side + i, off = !!MU_OFF[id];
+    if (!off) { mean += r[3]; vr += r[4] * r[4]; }
+    rows += '<tr class="' + (off ? "off" : "") + '"><td><label><input type="checkbox" data-mu="' + id + '"' + (off ? "" : " checked") + ' aria-label="' + r[0] + ' is playing">' +
+      '<span>' + r[0] + '<div class="mu-sub">' + r[1] + (r[5] ? ' · ' + r[5] : '') + '</div></span></label></td>' +
+      '<td>' + r[2] + '</td><td class="r num">' + f1(r[3]) + '</td></tr>';
+  });
+  return { mean: mean, vr: vr, rows: rows };
+}
+function renderMatchup() {
+  var a = muSide(MU_US, "u"), b = muSide(MU_OPP, "o");
+  var sd = Math.sqrt(a.vr + b.vr), p = sd > 0 ? phi((a.mean - b.mean) / sd) : 0.5;
+  var pct = Math.round(p * 100);
+  var advice = p >= 0.6 ? "You are the favorite. When two games project within a couple of points, take the steadier one: a safe week protects the lead. Their biggest swing is Wembanyama, who ranges from 12 to 52 in a game."
+    : p >= 0.45 ? "This is close to a coin flip. Stick with the recommended picks and watch the injury news; one rotation change can tip it."
+    : "You are the underdog. When two games project close, take the one with the higher ceiling, since you need an above-average week.";
+  document.getElementById("matchup").innerHTML =
+    '<div class="mu-head"><h2>Matchup · your chance this week</h2><div class="mu-odds num">' + pct + '%<small>' + f1(a.mean) + ' vs ' + f1(b.mean) + ' expected points</small></div></div>' +
+    '<div class="mu-cols"><div class="mu-col"><h3><span>Your starters</span><span class="num">' + f1(a.mean) + '</span></h3><table class="mu"><thead><tr><th>Player</th><th>Games</th><th class="r">Avg</th></tr></thead><tbody>' + a.rows + '</tbody></table></div>' +
+    '<div class="mu-col"><h3><span>Opponent</span><span class="num">' + f1(b.mean) + '</span></h3><table class="mu"><thead><tr><th>Player</th><th>Games</th><th class="r">Avg</th></tr></thead><tbody>' + b.rows + '</tbody></table></div></div>' +
+    '<p class="mu-advice">' + advice + '</p>' +
+    '<p class="hint">Average fantasy points in one game, from this season\'s logs at your scoring. Untick a player to remove him if he is out. The odds treat each player as one game with a normal spread, and ignore opponent defense, minutes changes and how the two teams\' picks differ. Treat it as a rough guide, not a forecast.</p>';
+}
+document.addEventListener("change", function (e) {
+  var id = e.target.dataset && e.target.dataset.mu;
+  if (!id) return;
+  if (e.target.checked) delete MU_OFF[id]; else MU_OFF[id] = true;
+  renderMatchup();
+});
+
+document.getElementById("risk").addEventListener("change", function (e) { RISK = e.target.checked; render(); });
+
+buildFields();
+render();
+renderMatchup();
+</script>
+
+</body>
+</html>
