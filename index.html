@@ -333,7 +333,7 @@ function load(uname) {
     d.opp = d.me ? d.matchups.filter(function (x) { return x.matchup_id === d.me.matchup_id && x.roster_id !== mine.roster_id; })[0] || null : null;
     D = d; UI.off = {}; UI.picks = {};
     try { UI.picks = JSON.parse(lsGet("pw_picks_" + d.league.league_id + "_" + d.week) || "{}") || {}; } catch (e) { UI.picks = {}; }
-    startersOf(d.me).concat(d.opp ? startersOf(d.opp) : []).forEach(function (pid) { var p = d.dict[pid]; if (p && p.injury_status === "Out") UI.off[pid] = true; });
+    startersOf(d.me).concat(d.opp ? startersOf(d.opp) : []).forEach(function (pid) { var p = d.dict[pid]; if (p && p.injury_status === "Out" && isLongOut(pid)) UI.off[pid] = true; });
     status("");
     $("app").hidden = false; $("refresh").hidden = false;
     render();
@@ -354,6 +354,14 @@ function missRate(pid, team) {
   var n = 0, m = 0;
   (D.teamGames[team] || []).forEach(function (g) { if (g.date >= first && g.date < today && g.status !== "pre_game") { n++; if (!played[String(g.game_id)]) m++; } });
   return { rate: (m + LGMISS * 8) / (n + 8), m: m, n: n };
+}
+/* "Out" is treated as out for the whole week only if the player also missed his team's last two finished games. Otherwise it is a one-day rest or short absence. */
+function isLongOut(pid) {
+  var pl = D.dict[pid] || {}; if (pl.injury_status !== "Out") return false;
+  var today = todayET(), played = {}; (D.logs[pid] || []).forEach(function (x) { played[x.gid] = 1; });
+  var done = (D.teamGames[pl.team] || []).filter(function (g) { return g.date < today && g.status !== "pre_game"; }).slice(-2);
+  if (done.length < 2) return true;
+  return done.every(function (g) { return !played[String(g.game_id)]; });
 }
 function rowsFor(pid) {
   var pl = D.dict[pid] || {}, team = pl.team; if (!team) return [];
@@ -379,9 +387,12 @@ function pickGames(rows) {
   return { top: top, rec: rec };
 }
 function info(pid) {
-  var pl = D.dict[pid] || {}, inj = pl.injury_status, rows = rowsFor(pid), sel = pickGames(rows), out = inj === "Out";
-  var st = out ? ["out", "Out" + (pl.injury_body_part ? " (" + pl.injury_body_part + ")" : "") + ". Keep the last game of the week selected in case he returns."] :
-    inj ? ["watch", inj + (pl.injury_body_part ? " (" + pl.injury_body_part + ")" : "") + ". Check the report before tip-off."] : ["ok", "No injury listed."];
+  var pl = D.dict[pid] || {}, inj = pl.injury_status, rows = rowsFor(pid), out = isLongOut(pid), dayOut = inj === "Out" && !out, today = todayET();
+  if (dayOut) rows.forEach(function (r) { if (r.date === today) r.avail = false; });
+  var sel = pickGames(rows), body = pl.injury_body_part ? " (" + pl.injury_body_part + ")" : "";
+  var st = out ? ["out", "Out" + body + ", and he missed his team's last two games. Keep the last game of the week selected in case he returns."] :
+    dayOut ? ["watch", "Listed out today" + body + ", but he played recently, so this looks like a rest or short absence. Today's game is skipped; later games still count."] :
+    inj ? ["watch", inj + body + ". Check the report before tip-off."] : ["ok", "No injury listed."];
   var avail = rows.filter(function (r) { return r.avail; });
   var rec = out ? (avail.length ? avail[avail.length - 1] : null) : sel.rec;
   return { pid: pid, name: pl.full_name || ("Player " + pid), team: pl.team || "?", pos: pl.position || "", age: pl.age || 27, base: baseOf(pid), rows: rows, top: sel.top, rec: rec, st: st, out: out, n: (D.logs[pid] || []).length };
