@@ -157,324 +157,352 @@ table.mu label { display: flex; gap: 8px; align-items: flex-start; cursor: point
 table.mu input[type="checkbox"] { margin-top: 3px; accent-color: var(--accent); }
 .mu-sub { font-size: 12px; color: var(--muted); }
 .mu-advice { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); border: 1px solid var(--accent); font-size: 14px; }
+
+.login { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.login input, .field select { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); min-width: 0; }
+.login input { flex: 1 1 200px; max-width: 320px; }
+.field select { width: 100%; font-size: 15px; padding: 6px 8px; }
+.status { font-size: 14px; color: var(--muted); margin: 0; }
+.status.err { color: var(--out); }
+.src { font-size: 12px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
+.src b { color: var(--ink); font-weight: 600; }
+.game.past { opacity: 0.55; cursor: default; }
+[hidden] { display: none !important; }
 </style>
 </head>
 <body>
-
-
 <div class="wrap">
   <header class="top">
-    <h1 class="brand">Pickwise<small>Weekly game picks for your Sleeper league</small></h1>
-    <span class="weekpill" id="weekpill">Week 5 · Nov 16 to 22</span>
+    <h1 class="brand">Pickwise<small id="leagueName">Weekly game picks for your Sleeper league</small></h1>
+    <span class="weekpill" id="weekpill">Not loaded</span>
   </header>
 
-  <section class="tonight" id="tonight" aria-live="polite"></section>
+  <form class="login" id="loginForm">
+    <input id="u" aria-label="Sleeper username" placeholder="Sleeper username" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <button class="btn" type="submit" id="go">Load my league</button>
+    <button class="btn ghost" type="button" id="refresh" hidden>Refresh</button>
+  </form>
+  <p class="status" id="status" aria-live="polite"></p>
 
-  <section class="summary" aria-label="Week summary">
-    <div class="stat"><div class="label">Projected at recommended picks</div><div class="value num" id="sumRec">0</div><div class="sub" id="sumRecSub"></div></div>
-    <div class="stat"><div class="label">Projected at your picks</div><div class="value num" id="sumMine">0</div><div class="sub" id="sumMineSub"></div></div>
-    <div class="stat"><div class="label">Difference</div><div class="value num" id="sumDiff">0</div><div class="sub">your picks minus recommended</div></div>
-  </section>
-  <div class="actions">
-    <button class="btn" id="useRec" type="button">Use all recommended picks</button>
-    <button class="btn ghost" id="clearPicks" type="button">Clear my picks</button>
-    <span class="hint">Tap a game to mark it as your pick. Picks stay in this browser only.</span>
+  <div id="app" hidden>
+    <section class="tonight" id="tonight" aria-live="polite"></section>
+    <section class="matchup" id="matchup" aria-label="Matchup"></section>
+
+    <section class="summary" aria-label="Week summary">
+      <div class="stat"><div class="label">Projected at recommended picks</div><div class="value num" id="sumRec">0</div><div class="sub" id="sumRecSub"></div></div>
+      <div class="stat"><div class="label">Projected at your picks</div><div class="value num" id="sumMine">0</div><div class="sub" id="sumMineSub"></div></div>
+      <div class="stat"><div class="label">Difference</div><div class="value num" id="sumDiff">0</div><div class="sub">your picks minus recommended</div></div>
+    </section>
+    <div class="actions">
+      <button class="btn" id="useRec" type="button">Use all recommended picks</button>
+      <button class="btn ghost" id="clearPicks" type="button">Clear my picks</button>
+      <span class="hint">Tap a game to mark it as your pick. Picks stay in this browser only.</span>
+    </div>
+
+    <details class="settings">
+      <summary>Model settings</summary>
+      <div class="settings-body">
+        <div class="fields">
+          <label class="field" for="mode">Projection source
+            <select id="mode">
+              <option value="blend">Blend: Pickwise and Sleeper</option>
+              <option value="pw">Pickwise only</option>
+              <option value="sl">Sleeper only</option>
+            </select></label>
+          <label class="field" for="margin">Lock early only if better by (pts)
+            <input id="margin" type="number" step="0.25" min="0" value="0.75"></label>
+        </div>
+        <label class="field" for="risk" style="flex-direction:row;align-items:center;gap:8px;font-size:14px;color:var(--ink)"><input id="risk" type="checkbox" style="width:auto">Experimental: discount later games by each player's miss rate</label>
+        <p class="hint">Pickwise projection: this season's average fantasy points at your league's scoring, adjusted for home or away and back-to-backs. Sleeper projection: Sleeper's own per-game projection. When a later game is within the margin of the top projection, the recommendation holds the later game, because injury and rest news keeps arriving until it starts. The miss-rate option moves picks earlier for players who often miss games, and it was tested on only 25 player-weeks.</p>
+      </div>
+    </details>
+
+    <div id="groups"></div>
   </div>
 
-  <section class="matchup" id="matchup" aria-label="Matchup"></section>
-
-  <details class="settings">
-    <summary>Scoring and model settings</summary>
-    <div class="settings-body">
-      <p class="hint">Scoring starts from your Sleeper settings. Change any value and every projection updates.</p>
-      <div class="fields" id="scoreFields"></div>
-      <div class="fields">
-        <label class="field" for="margin">Lock early only if better by (pts)
-          <input id="margin" type="number" step="0.25" min="0" value="0.75"></label>
-      </div>
-      <label class="field" for="risk" style="flex-direction:row;align-items:center;gap:8px;font-size:14px;color:var(--ink)"><input id="risk" type="checkbox" style="width:auto">Experimental: discount later games by each player's miss rate</label>
-      <p class="hint">Off by default. This season, 6 of the 8 games your players missed were the last game of their week. Turning this on lowers the projection of later games for players who miss games often, so the pick moves earlier. Tested on only 25 player-weeks, so use it as a second opinion.</p>
-      <p class="hint">When a later game is within this margin of the top projection, the recommendation holds the later game. Waiting brings more injury and rest news before you are locked in.</p>
-    </div>
-  </details>
-
-  <div id="groups"></div>
-
   <footer class="foot">
-    <p><b>How a projection is built.</b> Season-to-date per-game stat line, turned into fantasy points with your scoring, then adjusted for opponent scoring defense, game pace, home court, and back-to-backs (a bigger cut for players aged 35 and over).</p>
-    <p><b>Not in this version.</b> Rotation changes from injuries, blowout risk, player-by-player variance, and betting lines. Only the five teams that allow the most and the fewest points are adjusted; all other opponents count as average. Double-double and bonus frequencies are my estimates from recent games. Technical and flagrant fouls are ignored.</p>
-    <p><b>Sources.</b> Schedule, back-to-backs, pace and points allowed from FantasySixPack (week 5 planner, data through Nov 9). Player lines and injury notes from ESPN, Basketball Reference, RotoBaller, FantasyData, CBS Sports and team reports, read on Nov 16. Check the official injury report before each tip-off.</p>
-    <p><b>Matchup.</b> Game logs from ESPN through Nov 15 and the NBA's published schedule (as of Aug 13, subject to change). Your starters' averages come from the FPTS column in Sleeper's game logs; the opponent's come from ESPN logs, which can lag a few days. LeBron has missed 3 of 14 games and Podziemski 2 of 13, so untick them if they are out. Kelly Oubre Jr. has played only 5 games this season, so his average is thin.</p>
+    <p><b>How it works.</b> Your league, roster and matchup, the player stats, the schedule and the projections all come live from Sleeper's public data, using your league's own scoring. Nothing is stored anywhere except in this browser.</p>
+    <p><b>Not included.</b> Rotation changes when a teammate is out, blowout risk, opponent defense and betting lines. Differences under about 1 point are noise. Check the official injury report before each tip-off.</p>
   </footer>
 </div>
-
 <script>
-/*MODEL*/
-var DEFAULT_W = { pts: 0.5, reb: 1, ast: 1, stl: 2, blk: 2, tov: -1, ftm: 0.2, tpm: 0.5 };
-var DEFAULT_B = { dd: 2.5, td: 4, p40: 2, p50: 3, a15: 2, r20: 2 };
-var OPP_PPG = { CHI: 129.3, SAC: 122.4, MIL: 121.6, MIA: 121.1, NO: 120.8, DET: 103.9, OKC: 104.2, NY: 104.2, BOS: 104.3, MIN: 107.0 };
-var PACE = { CHI: 106.9, ATL: 105.1, MIA: 104.1, TOR: 103.9, NO: 103.2, CHA: 97.5, BOS: 97.7, NY: 98.4, DEN: 98.8, HOU: 99.4 };
-var LG_PPG = 114.0, LG_PACE = 101.0, K_DEF = 0.5, K_PACE = 0.4, HOME = 0.015, B2B = 0.03, B2B_OLD = 0.10;
+(function () {
+var API = "https://api.sleeper.app/v1", API2 = "https://api.sleeper.com";
+var LGMISS = 8 / 122;
+var D = null;                       /* loaded data */
+var UI = { mode: "blend", margin: 0.75, risk: false, off: {}, picks: {} };
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+function f1(x) { return (Math.round(x * 10) / 10).toFixed(1); }
+function status(t, err) { var el = $("status"); el.textContent = t || ""; el.className = "status" + (err ? " err" : ""); }
+function jget(url) { return fetch(url).then(function (r) { if (!r.ok) throw new Error("Sleeper answered " + r.status + " for " + url.replace(/^https:\/\/[^/]+/, "")); return r.json(); }); }
 
-function baseFp(line, W, B) {
-  var s = 0, k;
-  for (k in W) s += W[k] * line[k];
-  for (k in B) s += B[k] * line[k];
+/* ---------- dates ---------- */
+var DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+function utc(iso) { return new Date(iso + "T00:00:00Z"); }
+function addDays(iso, n) { var d = utc(iso); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function dow(iso) { return DOW[utc(iso).getUTCDay()]; }
+function md(iso) { var p = iso.split("-"); return (+p[1]) + "/" + (+p[2]); }
+function todayET() { try { return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }); } catch (e) { return new Date().toISOString().slice(0, 10); } }
+
+/* ---------- fantasy points with the league's own scoring ---------- */
+function fpActual(st, sc) {
+  var n = function (k) { return +st[k] || 0; };
+  var s = n("pts") * (sc.pts || 0) + n("reb") * (sc.reb || 0) + n("ast") * (sc.ast || 0) + n("stl") * (sc.stl || 0) + n("blk") * (sc.blk || 0) +
+    n("to") * (sc.to || 0) + n("tpm") * (sc.tpm || 0) + n("ftm") * (sc.ftm || 0) + n("ff") * (sc.ff || 0) + n("tf") * (sc.tf || 0);
+  var c = 0; ["pts", "reb", "ast", "stl", "blk"].forEach(function (k) { if (n(k) >= 10) c++; });
+  if (c >= 2) s += sc.dd || 0;
+  if (c >= 3) s += sc.td || 0;
+  if (n("pts") >= 40) s += sc.bonus_pt_40p || 0;
+  if (n("pts") >= 50) s += sc.bonus_pt_50p || 0;
+  if (n("ast") >= 15) s += sc.bonus_ast_15p || 0;
+  if (n("reb") >= 20) s += sc.bonus_reb_20p || 0;
   return s;
 }
-function adjust(team, g, age) {
-  var d = 1 + K_DEF * (((OPP_PPG[g.opp] || LG_PPG) - LG_PPG) / LG_PPG);
-  var gp = ((PACE[team] || LG_PACE) + (PACE[g.opp] || LG_PACE)) / 2;
-  var pc = 1 + K_PACE * (gp / LG_PACE - 1);
-  var h = g.home ? 1 + HOME : 1 - HOME;
-  var r = g.b2b ? 1 - (age >= 35 ? B2B_OLD : B2B) : 1;
-  return { mult: d * pc * h * r, d: d, pc: pc, h: h, r: r };
+function fpProj(st, sc) {
+  var n = function (k) { return +st[k] || 0; };
+  return n("pts") * (sc.pts || 0) + n("reb") * (sc.reb || 0) + n("ast") * (sc.ast || 0) + n("stl") * (sc.stl || 0) + n("blk") * (sc.blk || 0) +
+    n("to") * (sc.to || 0) + n("tpm") * (sc.tpm || 0) + n("ftm") * (sc.ftm || 0) + n("dd") * (sc.dd || 0) + n("td") * (sc.td || 0);
 }
-function pickGames(rows, margin) {
-  var top = rows.reduce(function (a, b) { return b.proj > a.proj ? b : a; });
-  var rec = top;
-  rows.forEach(function (g) { if (g.proj >= top.proj - margin && g.order > rec.order) rec = g; });
-  return { top: top, rec: rec };
-}
-/*ENDMODEL*/
 
-var DAYS = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
-function G(day, date, opp, home, b2b, tip) { return { day: day, date: date, opp: opp, home: home, b2b: b2b, tip: tip || "", order: DAYS[day] }; }
-
-var SCHED = {
-  CLE: [G("Mon","11/16","CHI",1,0,"7:00"), G("Wed","11/18","MEM",1,0), G("Fri","11/20","IND",1,0)],
-  HOU: [G("Mon","11/16","MIA",0,1,"7:30"), G("Wed","11/18","IND",0,0), G("Fri","11/20","DEN",0,0)],
-  GS:  [G("Mon","11/16","NO",0,0,"8:00"), G("Wed","11/18","DAL",0,0), G("Thu","11/19","MEM",0,1), G("Sun","11/22","BOS",1,0)],
-  PHI: [G("Mon","11/16","BKN",0,1,"7:30"), G("Wed","11/18","ORL",0,0), G("Sat","11/21","MIL",1,0)],
-  MIA: [G("Mon","11/16","HOU",1,0,"7:30"), G("Wed","11/18","MIL",1,0), G("Sun","11/22","OKC",1,0)],
-  MEM: [G("Mon","11/16","WAS",0,0,"7:00"), G("Wed","11/18","CLE",0,0), G("Thu","11/19","GS",1,1), G("Sat","11/21","MIN",0,0)],
-  SAC: [G("Wed","11/18","PHX",1,0), G("Fri","11/20","LAL",0,0), G("Sat","11/21","BOS",1,1)],
-  OKC: [G("Wed","11/18","ATL",1,0), G("Fri","11/20","NO",1,0), G("Sun","11/22","MIA",0,0)],
-  TOR: [G("Tue","11/17","NY",1,0), G("Wed","11/18","WAS",1,1), G("Fri","11/20","DET",0,0)],
-  NO:  [G("Mon","11/16","GS",1,0,"8:00"), G("Wed","11/18","DET",1,0), G("Fri","11/20","OKC",0,0), G("Sat","11/21","SA",0,1)],
-  DET: [G("Tue","11/17","SA",0,0), G("Wed","11/18","NO",0,1), G("Fri","11/20","TOR",1,0), G("Sun","11/22","ATL",0,0)],
-  CHI: [G("Mon","11/16","CLE",0,0,"7:00"), G("Wed","11/18","BKN",0,0), G("Fri","11/20","WAS",1,0), G("Sun","11/22","DEN",1,0)]
-};
-
-function L(pts, reb, ast, stl, blk, tov, tpm, ftm, dd, td, p40, p50, a15, r20) {
-  return { pts: pts, reb: reb, ast: ast, stl: stl, blk: blk, tov: tov, tpm: tpm, ftm: ftm, dd: dd, td: td, p40: p40, p50: p50, a15: a15, r20: r20 };
-}
-var PLAYERS = [
-  { name: "Donovan Mitchell", team: "CLE", pos: "G", age: 30, slot: "starter", st: ["ok", "Healthy."], line: L(22.6,5.2,5.8,1.2,0.4,3.0,2.7,4.6,.08,0,.03,0,.01,0) },
-  { name: "Amen Thompson", team: "HOU", pos: "G/F", age: 23, slot: "starter", st: ["ok", "Healthy. Monday is the second night of a back-to-back."], line: L(18.5,7.8,4.8,1.3,0.5,2.3,0.4,3.6,.30,.03,0,0,0,0) },
-  { name: "Brandin Podziemski", team: "GS", pos: "G", age: 23, slot: "starter", st: ["watch", "Back soreness earlier this season. Check the report before tip-off."], line: L(16.8,5.0,4.2,1.2,0.6,1.8,2.2,2.3,.05,0,0,0,0,0) },
-  { name: "LeBron James", team: "PHI", pos: "F", age: 42, slot: "starter", st: ["watch", "Age 42 with a back-to-back Monday. Rest is likely on the second night."], line: L(15.1,7.2,6.5,1.3,0.7,2.7,0.9,2.8,.25,.04,0,0,.01,0) },
-  { name: "Giannis Antetokounmpo", team: "MIA", pos: "F", age: 32, slot: "starter", st: ["watch", "Right wrist sprain, listed probable then questionable last week. Confirm status."], line: L(28.9,12.5,5.2,0.8,1.2,3.4,0.6,5.7,.85,.06,.10,.01,0,.04) },
-  { name: "Cameron Boozer", team: "MEM", pos: "F", age: 19, slot: "starter", st: ["ok", "Healthy."], line: L(16.5,9.8,5.4,1.0,0.6,2.7,1.3,4.9,.45,.04,0,0,0,0) },
-  { name: "Domantas Sabonis", team: "SAC", pos: "C", age: 30, slot: "starter", st: ["watch", "Left knee soreness. Reports conflict on whether he played Nov 10. Check before Wednesday."], line: L(13.8,13.3,5.9,0.8,0.1,3.1,0.2,2.6,.85,.10,0,0,0,.03) },
-  { name: "VJ Edgecombe", team: "PHI", pos: "G", age: 21, slot: "starter", st: ["ok", "Healthy."], line: L(15.0,5.5,4.2,1.4,0.5,1.9,2.0,2.2,.03,0,0,0,0,0) },
-  { name: "Isaiah Hartenstein", team: "OKC", pos: "C", age: 28, slot: "starter", st: ["ok", "Healthy. About 24 minutes a game."], line: L(9.5,9.2,2.0,0.8,0.7,1.5,0.0,1.6,.40,0,0,0,0,.01) },
-  { name: "Immanuel Quickley", team: "TOR", pos: "G", age: 27, slot: "bench", st: ["ok", "Active."], line: L(18.0,3.9,5.6,1.0,0.0,1.9,2.7,3.9,.03,0,0,0,0,0) },
-  { name: "Jeremiah Fears", team: "NO", pos: "G", age: 20, slot: "bench", st: ["ok", "Healthy."], line: L(14.5,4.4,4.9,1.0,0.5,2.5,1.1,2.4,.02,0,0,0,.02,0) },
-  { name: "Yves Missi", team: "NO", pos: "C", age: 22, slot: "bench", st: ["out", "Left knee bone bruise. Ruled out for 10 straight games through Nov 11, no return date."], line: L(9.5,7.5,2.5,1.0,2.0,1.5,0.0,1.5,.25,0,0,0,0,0) },
-  { name: "Daniss Jenkins", team: "DET", pos: "G", age: 25, slot: "bench", st: ["ok", "Healthy. Backup to Cade Cunningham."], line: L(12.7,3.6,4.7,0.8,0.1,2.1,2.1,2.2,.02,0,0,0,0,0) },
-  { name: "Caleb Wilson", team: "CHI", pos: "F", age: 20, slot: "injured", st: ["watch", "Right hip soreness, questionable on Nov 11. You have him in your injured slot."], line: L(21.6,6.7,2.7,2.0,1.3,3.0,1.0,5.6,.15,0,.02,0,0,0) }
-];
-
-var W = Object.assign({}, DEFAULT_W), B = Object.assign({}, DEFAULT_B), MARGIN = 0.75;
-var PICKS = {};
-var STORE_KEY = "pickwise-w5-picks";
-try { PICKS = JSON.parse(localStorage.getItem(STORE_KEY) || "{}") || {}; } catch (e) { PICKS = {}; }
-function savePicks() { try { localStorage.setItem(STORE_KEY, JSON.stringify(PICKS)); } catch (e) {} }
-
-var LABELS = { pts: "Point", reb: "Rebound", ast: "Assist", stl: "Steal", blk: "Block", tov: "Turnover", ftm: "Free throw made", tpm: "3-pointer made",
-  dd: "Double-double", td: "Triple-double", p40: "40+ points", p50: "50+ points", a15: "15+ assists", r20: "20+ rebounds" };
-
-function reasons(p, g, a) {
+/* ---------- loading ---------- */
+function compactWeek(arr, sc) {
   var out = [];
-  if (OPP_PPG[g.opp] && a.d > 1.02) out.push(g.opp + " allow " + OPP_PPG[g.opp] + " points a game, among the most in the league");
-  if (OPP_PPG[g.opp] && a.d < 0.985) out.push(g.opp + " allow only " + OPP_PPG[g.opp] + " points a game");
-  if (a.pc > 1.012) out.push("fast pace");
-  if (a.pc < 0.992) out.push("slow pace");
-  if (g.b2b) out.push("second night of a back-to-back");
+  (arr || []).forEach(function (it) {
+    var pid = String(it.player_id || ""); if (!pid || pid.indexOf("TEAM") === 0) return;
+    var st = it.stats || {}; if (!(+st.min > 0)) return;
+    out.push([pid, it.date, it.opponent, it.team, String(it.game_id), Math.round(fpActual(st, sc) * 10) / 10, +st.min]);
+  });
   return out;
 }
-
-/* games missed this season / games scheduled, from Sleeper game logs through Nov 15 */
-var MISS = { "Donovan Mitchell": [1, 14], "Amen Thompson": [0, 14], "Brandin Podziemski": [2, 13], "LeBron James": [3, 14], "Giannis Antetokounmpo": [0, 13],
-  "Cameron Boozer": [0, 13], "Domantas Sabonis": [1, 13], "VJ Edgecombe": [1, 14], "Isaiah Hartenstein": [0, 14] };
-var RISK = false, LG_MISS = 8 / 122;
-function missRate(p) { var m = MISS[p.name]; return m ? (m[0] + LG_MISS * 8) / (m[1] + 8) : LG_MISS; }
-function compute() {
-  PLAYERS.forEach(function (p) {
-    p.base = baseFp(p.line, W, B);
-    var nG = SCHED[p.team].length, mr = missRate(p);
-    p.rows = SCHED[p.team].map(function (g, gi) {
-      var a = adjust(p.team, g, p.age), why = reasons(p, g, a), k = 1;
-      if (RISK && nG > 1) { k = 1 - 2 * mr * gi / (nG - 1); if (gi > 0 && mr > 0.1) why.push("misses " + Math.round(mr * 100) + "% of games, more often late in the week"); }
-      return Object.assign({}, g, { proj: p.base * a.mult * k, why: why });
-    });
-    var sel = pickGames(p.rows, MARGIN);
-    p.top = sel.top;
-    p.rec = p.st[0] === "out" ? p.rows[p.rows.length - 1] : sel.rec;
+function loadWeekStats(season, wk, sc, current) {
+  var key = "pw_stats_" + season + "_" + wk + "_" + JSON.stringify(sc).length;
+  if (!current) { var c = lsGet(key); if (c) { try { return Promise.resolve(JSON.parse(c)); } catch (e) {} } }
+  return jget(API2 + "/stats/nba/" + season + "/" + wk + "?season_type=regular").then(function (arr) {
+    var comp = compactWeek(arr, sc);
+    if (!current) lsSet(key, JSON.stringify(comp));
+    return comp;
   });
 }
-function f1(x) { return (Math.round(x * 10) / 10).toFixed(1); }
-function key(p, g) { return g.date; }
+function load(uname) {
+  uname = uname.trim().toLowerCase(); if (!uname) return;
+  lsSet("pw_user", uname);
+  $("go").disabled = true; $("app").hidden = true;
+  var d = { user: uname };
+  status("Finding your account…");
+  return jget(API + "/state/nba").then(function (st) {
+    d.season = st.season || "2026"; d.week = st.week || st.leg || 1;
+    return jget(API + "/user/" + encodeURIComponent(uname));
+  }).then(function (u) {
+    if (!u || !u.user_id) throw new Error("No Sleeper user named " + uname);
+    d.uid = u.user_id;
+    return jget(API + "/user/" + d.uid + "/leagues/nba/" + d.season);
+  }).then(function (ls) {
+    if (!ls || !ls.length) throw new Error("No NBA leagues found for " + uname + " this season");
+    var saved = lsGet("pw_league"); var pick = ls.filter(function (l) { return l.league_id === saved; })[0] || ls[0];
+    d.leagues = ls; d.league = pick; d.sc = pick.scoring_settings || null;
+    status("Loading " + pick.name + "…");
+    return (d.sc ? Promise.resolve() : jget(API + "/league/" + pick.league_id).then(function (l) { d.sc = l.scoring_settings || {}; })).then(function () { return Promise.all([jget(API + "/league/" + pick.league_id + "/rosters"), jget(API + "/league/" + pick.league_id + "/matchups/" + d.week), jget(API + "/league/" + pick.league_id + "/users")]); });
+  }).then(function (r) {
+    d.rosters = r[0]; d.matchups = r[1]; d.users = r[2];
+    status("Loading players and the schedule…");
+    return Promise.all([jget(API + "/players/nba"), jget(API2 + "/schedule/nba/regular/" + d.season), jget(API2 + "/projections/nba/" + d.season + "/" + d.week + "?season_type=regular").catch(function () { return []; })]);
+  }).then(function (r) {
+    d.dict = r[0]; d.sched = r[1] || []; d.projRaw = r[2] || [];
+    var jobs = [];
+    for (var w = 1; w <= d.week; w++) (function (w) {
+      status("Loading game stats, week " + w + " of " + d.week + "… (the first time takes a little while)");
+      jobs.push(loadWeekStats(d.season, w, d.sc, w === d.week));
+    })(w);
+    return Promise.all(jobs);
+  }).then(function (weeks) {
+    d.logs = {};
+    weeks.forEach(function (rows) { rows.forEach(function (x) { (d.logs[x[0]] = d.logs[x[0]] || []).push({ date: x[1], opp: x[2], team: x[3], gid: x[4], fp: x[5], min: x[6] }); }); });
+    Object.keys(d.logs).forEach(function (k) { d.logs[k].sort(function (a, b) { return a.date < b.date ? -1 : 1; }); });
+    d.proj = {};
+    d.projRaw.forEach(function (it) { if (it.player_id && it.game_id && it.stats) d.proj[String(it.player_id) + "|" + String(it.game_id)] = fpProj(it.stats, d.sc); });
+    d.teamDates = {}; d.teamGames = {};
+    d.sched.forEach(function (g) { [g.home.team, g.away.team].forEach(function (t) { (d.teamDates[t] = d.teamDates[t] || {})[g.date] = 1; (d.teamGames[t] = d.teamGames[t] || []).push(g); }); });
+    Object.keys(d.teamGames).forEach(function (t) { d.teamGames[t].sort(function (a, b) { return a.date < b.date ? -1 : 1; }); });
+    var mine = d.rosters.filter(function (x) { return x.owner_id === d.uid; })[0];
+    if (!mine) throw new Error("Could not find your team in this league");
+    d.myRoster = mine;
+    d.me = d.matchups.filter(function (x) { return x.roster_id === mine.roster_id; })[0] || null;
+    d.opp = d.me ? d.matchups.filter(function (x) { return x.matchup_id === d.me.matchup_id && x.roster_id !== mine.roster_id; })[0] || null : null;
+    D = d; UI.off = {}; UI.picks = {};
+    try { UI.picks = JSON.parse(lsGet("pw_picks_" + d.league.league_id + "_" + d.week) || "{}") || {}; } catch (e) { UI.picks = {}; }
+    startersOf(d.me).concat(d.opp ? startersOf(d.opp) : []).forEach(function (pid) { var p = d.dict[pid]; if (p && p.injury_status === "Out") UI.off[pid] = true; });
+    status("");
+    $("app").hidden = false; $("refresh").hidden = false;
+    render();
+  }).catch(function (e) { status("Could not load: " + (e && e.message || e), true); }).then(function () { $("go").disabled = false; });
+}
+function startersOf(m) { return (m && m.starters || []).filter(function (x) { return x && x !== "0"; }); }
 
-function render() {
-  compute();
-  var html = "";
-  [["starter", "Starters"], ["bench", "Bench"], ["injured", "Injured slot"]].forEach(function (grp) {
-    var list = PLAYERS.filter(function (p) { return p.slot === grp[0]; });
-    var isStart = grp[0] === "starter";
-    html += isStart ? '<h2 class="group"><span>Starters · pick a game for each</span><span>' + list.length + ' players</span></h2>' : '<details class="benchbox"><summary>' + grp[1] + ' · ' + list.length + ' players · no picks needed</summary>';
-    html += '<div class="grid" style="margin-bottom:20px">';
-    list.forEach(function (p) {
-      var idx = PLAYERS.indexOf(p);
-      var maxp = Math.max.apply(null, p.rows.map(function (g) { return g.proj; }));
-      var lbl = { ok: "Healthy", watch: "Watch", out: "Out" }[p.st[0]];
-      html += '<article class="card"><div class="head"><div><div class="name">' + p.name + '</div><div class="meta">' + p.team + ' · ' + p.pos + ' · ' + f1(p.base) + ' fantasy pts per game at your scoring' + (MISS[p.name] && MISS[p.name][0] > 0 ? ' · missed ' + MISS[p.name][0] + ' of ' + MISS[p.name][1] + ' games' : '') + '</div></div><span class="chip ' + p.st[0] + '">' + lbl + '</span></div>';
-      html += '<p class="statusnote">' + p.st[1] + '</p><div class="games">';
-      p.rows.forEach(function (g, gi) {
-        var isRec = g === p.rec, isMine = PICKS[p.name] === g.date;
-        var tag = isMine ? "Your pick" : (isRec ? (p.st[0] === "out" ? "Hold last game" : "Recommended") : (g.tip ? "Tonight " + g.tip + " ET" : ""));
-        if (isMine && isRec) tag = "Your pick ✓";
-        html += '<button type="button" class="game' + (isRec ? " rec" : "") + (isMine ? " mine" : "") + '" data-p="' + idx + '" data-g="' + gi + '" aria-pressed="' + isMine + '">' +
-          '<span class="when">' + g.day + ' ' + g.date + (g.tip && isRec ? ' · ' + g.tip + ' ET' : '') + '</span><span class="vs">' + (g.home ? 'vs ' : '@ ') + g.opp + '</span>' +
-          '<span class="pts num">' + f1(g.proj) + '</span><span class="bar"><i style="width:' + Math.max(8, Math.round(g.proj / maxp * 100)) + '%"></i></span><span class="tag">' + tag + '</span></button>';
-      });
-      html += '</div>';
-      var r = p.rec, t = p.top, w = (r.why.length ? r.why.join("; ") : "no standout edge, so the pick comes down to the schedule slot");
-      var note;
-      if (p.st[0] === "out") note = "<b>Out for now.</b> Keep the last game of the week selected in case he returns.";
-      else if (r === t) note = "<b>" + r.day + " " + (r.home ? "vs " : "@ ") + r.opp + " is the top projection:</b> " + w + ".";
-      else note = "<b>" + r.day + " " + (r.home ? "vs " : "@ ") + r.opp + "</b> is within " + f1(t.proj - r.proj) + " pts of the top projection (" + t.day + " " + (t.home ? "vs " : "@ ") + t.opp + "). Holding the later game keeps you flexible while news comes in.";
-      html += '<p class="why">' + note + '</p></article>';
-    });
-    html += '</div>' + (isStart ? '' : '</details>');
+/* ---------- model ---------- */
+function mean(a) { return a.reduce(function (s, x) { return s + x; }, 0) / a.length; }
+function sd(a) { if (a.length < 4) return 7; var m = mean(a); return Math.sqrt(mean(a.map(function (x) { return (x - m) * (x - m); }))); }
+function baseOf(pid) {
+  var l = (D.logs[pid] || []).map(function (x) { return x.fp; });
+  return (l.length ? (l.reduce(function (s, x) { return s + x; }, 0) + 18 * 2) / (l.length + 2) : 16);
+}
+function missRate(pid, team) {
+  var l = D.logs[pid] || []; if (!l.length) return LGMISS;
+  var first = l[0].date, today = todayET(), played = {}; l.forEach(function (x) { played[x.gid] = 1; });
+  var n = 0, m = 0;
+  (D.teamGames[team] || []).forEach(function (g) { if (g.date >= first && g.date < today && g.status !== "pre_game") { n++; if (!played[String(g.game_id)]) m++; } });
+  return { rate: (m + LGMISS * 8) / (n + 8), m: m, n: n };
+}
+function rowsFor(pid) {
+  var pl = D.dict[pid] || {}, team = pl.team; if (!team) return [];
+  var games = (D.teamGames[team] || []).filter(function (g) { return String(g.week) === String(D.week); });
+  var base = baseOf(pid), age = pl.age || 27, mr = missRate(pid, team), mrate = mr.rate || LGMISS, nG = games.length, today = todayET();
+  return games.map(function (g, i) {
+    var home = g.home.team === team, opp = home ? g.away.team : g.home.team;
+    var b2b = !!(D.teamDates[team] && D.teamDates[team][addDays(g.date, -1)]);
+    var pw = base * (home ? 1.015 : 0.985) * (b2b ? (age >= 35 ? 0.90 : 0.97) : 1);
+    var sp = D.proj[pid + "|" + g.game_id]; if (sp === undefined) sp = null;
+    var v = UI.mode === "pw" ? pw : UI.mode === "sl" ? (sp == null ? pw : sp) : (sp == null ? pw : (pw + sp) / 2);
+    var k = 1, why = [];
+    if (UI.risk && nG > 1) { k = 1 - 2 * mrate * i / (nG - 1); if (i > 0 && mrate > 0.1) why.push("misses " + Math.round(mrate * 100) + "% of games, more often late in the week"); }
+    if (b2b) why.push("second night of a back-to-back");
+    if (sp != null && Math.abs(sp - pw) >= 2) why.push("Sleeper projects " + f1(sp) + " and Pickwise " + f1(pw));
+    return { gid: String(g.game_id), date: g.date, day: dow(g.date), opp: opp, home: home, b2b: b2b, pw: pw, sp: sp, proj: v * k, why: why, avail: g.status === "pre_game" && g.date >= today, idx: i };
   });
-  document.getElementById("groups").innerHTML = html;
-  summary();
-  tonight();
+}
+function pickGames(rows) {
+  var av = rows.filter(function (r) { return r.avail; }); if (!av.length) return { top: null, rec: null };
+  var top = av.reduce(function (a, r) { return r.proj > a.proj ? r : a; }, av[0]);
+  var rec = av.filter(function (r) { return r.proj >= top.proj - UI.margin; }).pop();
+  return { top: top, rec: rec };
+}
+function info(pid) {
+  var pl = D.dict[pid] || {}, inj = pl.injury_status, rows = rowsFor(pid), sel = pickGames(rows), out = inj === "Out";
+  var st = out ? ["out", "Out" + (pl.injury_body_part ? " (" + pl.injury_body_part + ")" : "") + ". Keep the last game of the week selected in case he returns."] :
+    inj ? ["watch", inj + (pl.injury_body_part ? " (" + pl.injury_body_part + ")" : "") + ". Check the report before tip-off."] : ["ok", "No injury listed."];
+  var avail = rows.filter(function (r) { return r.avail; });
+  var rec = out ? (avail.length ? avail[avail.length - 1] : null) : sel.rec;
+  return { pid: pid, name: pl.full_name || ("Player " + pid), team: pl.team || "?", pos: pl.position || "", age: pl.age || 27, base: baseOf(pid), rows: rows, top: sel.top, rec: rec, st: st, out: out, n: (D.logs[pid] || []).length };
 }
 
-function summary() {
-  var rec = 0, mine = 0, set = 0, starters = PLAYERS.filter(function (p) { return p.slot === "starter" && p.st[0] !== "out"; });
-  starters.forEach(function (p) {
-    rec += p.rec.proj;
-    var m = PICKS[p.name];
-    if (m) { set++; var g = p.rows.filter(function (x) { return x.date === m; })[0]; if (g) mine += g.proj; }
+/* ---------- rendering ---------- */
+function phi(z) { var t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2); var p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; }
+function side(ids) {
+  var mean_ = 0, vr = 0, rows = "";
+  ids.forEach(function (pid) {
+    var i = info(pid), logs = (D.logs[pid] || []).map(function (x) { return x.fp; });
+    var avg = i.rows.length ? mean(i.rows.map(function (r) { return r.proj; })) : i.base;
+    var s = sd(logs), off = !!UI.off[pid];
+    if (!off) { mean_ += avg; vr += s * s; }
+    var days = i.rows.map(function (r) { return r.day; }).join(", ") || "no games";
+    rows += '<tr class="' + (off ? "off" : "") + '"><td><label><input type="checkbox" data-mu="' + esc(pid) + '"' + (off ? "" : " checked") + ' aria-label="' + esc(i.name) + ' is playing"><span>' + esc(i.name) + '<div class="mu-sub">' + esc(i.team) + (i.st[0] !== "ok" ? " · " + esc(i.st[0] === "out" ? "Out" : "Watch") : "") + (i.n < 4 ? " · only " + i.n + " games" : "") + '</div></span></label></td><td>' + esc(days) + '</td><td class="r num">' + f1(avg) + '</td></tr>';
   });
-  document.getElementById("sumRec").textContent = f1(rec);
-  document.getElementById("sumRecSub").textContent = "sum for " + starters.length + " healthy starters, one game each";
-  document.getElementById("sumMine").textContent = set ? f1(mine) : "–";
-  document.getElementById("sumMineSub").textContent = set + " of " + starters.length + " starters set";
-  document.getElementById("sumDiff").textContent = set === starters.length ? ((mine - rec >= 0 ? "+" : "") + f1(mine - rec)) : "–";
-}
-
-function tonight() {
-  var sts = PLAYERS.filter(function (p) { return p.slot === "starter"; });
-  var lock = sts.filter(function (p) { return p.st[0] !== "out" && p.rec.order === 1; });
-  var monday = sts.filter(function (p) { return p.rows.some(function (g) { return g.order === 1; }); });
-  var el = document.getElementById("tonight");
-  var names = lock.map(function (p) { return p.name + " (" + (p.rec.home ? "vs " : "@ ") + p.rec.opp + ", " + p.rec.tip + " ET)"; });
-  el.innerHTML = '<strong>Monday games tip off tonight, 7:00 to 9:00 pm ET (2:00 to 4:00 am Tuesday in Israel).</strong>' +
-    '<p>' + (names.length ? 'Recommended to lock in Monday: ' + names.join(", ") + '. ' : 'No starter is recommended on a Monday game. ') +
-    'Everyone else is better held for a later game. ' + monday.length + ' of your ' + sts.length + ' starters have a Monday game, and a pick can no longer be changed once that game starts.</p>';
-}
-
-function buildFields() {
-  var h = "";
-  Object.keys(W).concat(Object.keys(B)).forEach(function (k) {
-    var v = (k in W) ? W[k] : B[k];
-    h += '<label class="field" for="w-' + k + '">' + LABELS[k] + '<input id="w-' + k + '" data-k="' + k + '" type="number" step="0.1" value="' + v + '"></label>';
-  });
-  document.getElementById("scoreFields").innerHTML = h;
-}
-
-document.addEventListener("click", function (e) {
-  var b = e.target.closest(".game");
-  if (!b) return;
-  var p = PLAYERS[+b.dataset.p], g = p.rows[+b.dataset.g];
-  if (PICKS[p.name] === g.date) delete PICKS[p.name]; else PICKS[p.name] = g.date;
-  savePicks(); render();
-});
-document.addEventListener("input", function (e) {
-  var k = e.target.dataset && e.target.dataset.k;
-  if (k) { var v = parseFloat(e.target.value); if (isNaN(v)) return; if (k in W) W[k] = v; else B[k] = v; render(); }
-  if (e.target.id === "margin") { var m = parseFloat(e.target.value); if (!isNaN(m) && m >= 0) { MARGIN = m; render(); } }
-});
-document.getElementById("useRec").addEventListener("click", function () {
-  PLAYERS.forEach(function (p) { if (p.slot === "starter" && p.st[0] !== "out") PICKS[p.name] = p.rec.date; });
-  savePicks(); render();
-});
-document.getElementById("clearPicks").addEventListener("click", function () { PICKS = {}; savePicks(); render(); });
-
-/* ---------- Matchup: win chance vs this week's opponent ---------- */
-/* mean and sd = fantasy points in a single game, from 2026-27 game logs through Nov 15 at league scoring.
-   Your starters' numbers are Sleeper's own FPTS column (11 to 14 games each). The opponent's are from ESPN logs. */
-var MU_US = [
-  ["Giannis Antetokounmpo", "MIA", "Mon, Wed, Sun", 36.6, 9.9, ""],
-  ["Domantas Sabonis", "SAC", "Wed, Fri, Sat", 27.3, 9.5, ""],
-  ["Donovan Mitchell", "CLE", "Mon, Wed, Fri", 25.0, 6.1, ""],
-  ["LeBron James", "PHI", "Mon, Wed, Sat", 24.7, 5.7, ""],
-  ["Cameron Boozer", "MEM", "Mon, Wed, Thu, Sat", 25.2, 6.9, ""],
-  ["Isaiah Hartenstein", "OKC", "Wed, Fri, Sun", 20.7, 6.7, ""],
-  ["Brandin Podziemski", "GS", "Mon, Wed, Thu, Sun", 21.0, 5.7, ""],
-  ["Amen Thompson", "HOU", "Mon, Wed, Fri", 21.6, 7.4, ""],
-  ["VJ Edgecombe", "PHI", "Mon, Wed, Sat", 20.5, 7.1, ""]
-];
-var MU_OPP = [
-  ["Jalen Brunson", "NY", "Tue, Thu, Sat, Sun", 24.1, 5.2, ""],
-  ["Damian Lillard", "POR", "Mon, Thu, Sat", 19.7, 5.6, ""],
-  ["De'Aaron Fox", "SA", "Tue, Thu, Sat", 19.4, 6.0, ""],
-  ["Kelly Oubre Jr.", "IND", "Wed, Fri, Sun", 11.0, 2.0, "5 games only"],
-  ["Michael Porter Jr.", "BKN", "Mon, Wed, Fri", 23.8, 7.0, ""],
-  ["Deni Avdija", "POR", "Mon, Thu, Sat", 26.6, 5.7, ""],
-  ["Victor Wembanyama", "SA", "Tue, Thu, Sat", 42.6, 15.1, ""],
-  ["Joel Embiid", "PHI", "Mon, Wed, Sat", 25.9, 8.6, ""],
-  ["Myles Turner", "MIL", "Wed, Thu, Sat", 16.9, 7.6, ""]
-];
-var MU_OFF = {};
-function phi(z) {
-  var t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2);
-  var p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-  return z > 0 ? 1 - p : p;
-}
-function muSide(list, side) {
-  var mean = 0, vr = 0, rows = "";
-  list.forEach(function (r, i) {
-    var id = side + i, off = !!MU_OFF[id];
-    if (!off) { mean += r[3]; vr += r[4] * r[4]; }
-    rows += '<tr class="' + (off ? "off" : "") + '"><td><label><input type="checkbox" data-mu="' + id + '"' + (off ? "" : " checked") + ' aria-label="' + r[0] + ' is playing">' +
-      '<span>' + r[0] + '<div class="mu-sub">' + r[1] + (r[5] ? ' · ' + r[5] : '') + '</div></span></label></td>' +
-      '<td>' + r[2] + '</td><td class="r num">' + f1(r[3]) + '</td></tr>';
-  });
-  return { mean: mean, vr: vr, rows: rows };
+  return { mean: mean_, vr: vr, rows: rows };
 }
 function renderMatchup() {
-  var a = muSide(MU_US, "u"), b = muSide(MU_OPP, "o");
-  var sd = Math.sqrt(a.vr + b.vr), p = sd > 0 ? phi((a.mean - b.mean) / sd) : 0.5;
-  var pct = Math.round(p * 100);
-  var advice = p >= 0.6 ? "You are the favorite. When two games project within a couple of points, take the steadier one: a safe week protects the lead. Their biggest swing is Wembanyama, who ranges from 12 to 52 in a game."
-    : p >= 0.45 ? "This is close to a coin flip. Stick with the recommended picks and watch the injury news; one rotation change can tip it."
-    : "You are the underdog. When two games project close, take the one with the higher ceiling, since you need an above-average week.";
-  document.getElementById("matchup").innerHTML =
-    '<div class="mu-head"><h2>Matchup · your chance this week</h2><div class="mu-odds num">' + pct + '%<small>' + f1(a.mean) + ' vs ' + f1(b.mean) + ' expected points</small></div></div>' +
-    '<div class="mu-cols"><div class="mu-col"><h3><span>Your starters</span><span class="num">' + f1(a.mean) + '</span></h3><table class="mu"><thead><tr><th>Player</th><th>Games</th><th class="r">Avg</th></tr></thead><tbody>' + a.rows + '</tbody></table></div>' +
-    '<div class="mu-col"><h3><span>Opponent</span><span class="num">' + f1(b.mean) + '</span></h3><table class="mu"><thead><tr><th>Player</th><th>Games</th><th class="r">Avg</th></tr></thead><tbody>' + b.rows + '</tbody></table></div></div>' +
+  var el = $("matchup");
+  if (!D.me || !D.opp) { el.innerHTML = '<div class="mu-head"><h2>Matchup</h2></div><p class="hint">No opponent found for this week yet.</p>'; return; }
+  var a = side(startersOf(D.me)), b = side(startersOf(D.opp));
+  var sdv = Math.sqrt(a.vr + b.vr), p = sdv > 0 ? phi((a.mean - b.mean) / sdv) : 0.5, pct = Math.round(p * 100);
+  var oppUser = (D.users || []).filter(function (u) { return u.user_id === D.opp.owner_id || false; })[0];
+  var oppRoster = D.rosters.filter(function (r) { return r.roster_id === D.opp.roster_id; })[0], oppName = "Opponent";
+  if (oppRoster) { var ou = (D.users || []).filter(function (u) { return u.user_id === oppRoster.owner_id; })[0]; if (ou) oppName = ou.display_name || ou.username || oppName; }
+  var advice = p >= 0.6 ? "You are the favorite. When two games project within a couple of points, take the steadier one: a safe week protects the lead." :
+    p >= 0.45 ? "This is close to a coin flip. Stick with the recommended picks and watch the injury news; one rotation change can tip it." :
+    "You are the underdog. When two games project close, take the one with the higher ceiling, since you need an above-average week.";
+  el.innerHTML = '<div class="mu-head"><h2>Matchup · your chance this week</h2><div class="mu-odds num">' + pct + '%<small>' + f1(a.mean) + ' vs ' + f1(b.mean) + ' expected points</small></div></div>' +
+    '<p class="hint">Scored so far this week: you ' + f1(D.me.points || 0) + ', ' + esc(oppName) + ' ' + f1(D.opp.points || 0) + '.</p>' +
+    '<div class="mu-cols"><div class="mu-col"><h3><span>Your starters</span><span class="num">' + f1(a.mean) + '</span></h3><table class="mu"><thead><tr><th>Player</th><th>Games</th><th class="r">Proj</th></tr></thead><tbody>' + a.rows + '</tbody></table></div>' +
+    '<div class="mu-col"><h3><span>' + esc(oppName) + '</span><span class="num">' + f1(b.mean) + '</span></h3><table class="mu"><thead><tr><th>Player</th><th>Games</th><th class="r">Proj</th></tr></thead><tbody>' + b.rows + '</tbody></table></div></div>' +
     '<p class="mu-advice">' + advice + '</p>' +
-    '<p class="hint">Average fantasy points in one game, from this season\'s logs at your scoring. Untick a player to remove him if he is out. The odds treat each player as one game with a normal spread, and ignore opponent defense, minutes changes and how the two teams\' picks differ. Treat it as a rough guide, not a forecast.</p>';
+    '<p class="hint">Projection is the average over a player\'s games this week at your scoring. Untick a player to remove him if he is out. The odds treat each player as one game with a normal spread and ignore opponent defense and minutes changes. Treat it as a rough guide, not a forecast.</p>';
 }
-document.addEventListener("change", function (e) {
-  var id = e.target.dataset && e.target.dataset.mu;
-  if (!id) return;
-  if (e.target.checked) delete MU_OFF[id]; else MU_OFF[id] = true;
-  renderMatchup();
+function render() {
+  $("leagueName").textContent = D.league.name;
+  $("weekpill").textContent = "Week " + D.week;
+  if (D.leagues.length > 1) { /* simple league switch via prompt-free select is left for later */ }
+  var ids = startersOf(D.me), html = "";
+  var infos = ids.map(info);
+  window.__infos = infos;
+  html += '<h2 class="group"><span>Starters · pick a game for each</span><span>' + infos.length + ' players</span></h2><div class="grid" style="margin-bottom:20px">';
+  infos.forEach(function (i, pi) {
+    var maxp = Math.max.apply(null, i.rows.map(function (g) { return g.proj; }).concat([1]));
+    var lbl = { ok: "Healthy", watch: "Watch", out: "Out" }[i.st[0]];
+    html += '<article class="card"><div class="head"><div><div class="name">' + esc(i.name) + '</div><div class="meta">' + esc(i.team) + ' · ' + esc(i.pos) + ' · ' + f1(i.base) + ' fantasy pts per game at your scoring</div></div><span class="chip ' + i.st[0] + '">' + lbl + '</span></div>';
+    html += '<p class="statusnote">' + esc(i.st[1]) + '</p><div class="games">';
+    i.rows.forEach(function (g, gi) {
+      var isRec = i.rec && g.gid === i.rec.gid, isMine = UI.picks[i.pid] === g.gid;
+      var tag = isMine ? "Your pick" : (isRec ? (i.out ? "Hold last game" : "Recommended") : (!g.avail ? "Played" : ""));
+      if (isMine && isRec) tag = "Your pick ✓";
+      html += '<button type="button" class="game' + (isRec ? " rec" : "") + (isMine ? " mine" : "") + (!g.avail ? " past" : "") + '" data-p="' + pi + '" data-g="' + gi + '" aria-pressed="' + isMine + '"' + (!g.avail ? ' disabled' : '') + '>' +
+        '<span class="when">' + g.day + ' ' + md(g.date) + '</span><span class="vs">' + (g.home ? 'vs ' : '@ ') + esc(g.opp) + '</span>' +
+        '<span class="pts num">' + f1(g.proj) + '</span><span class="bar"><i style="width:' + Math.max(8, Math.round(g.proj / maxp * 100)) + '%"></i></span><span class="tag">' + tag + '</span></button>';
+    });
+    if (!i.rows.length) html += '<span class="hint">No games found this week.</span>';
+    html += '</div>';
+    var note;
+    if (i.out) note = "<b>Out for now.</b> Keep the last game of the week selected in case he returns.";
+    else if (!i.rec) note = "All of this week's games have started.";
+    else {
+      var r = i.rec, t = i.top, why = r.why.length ? r.why.join("; ") : "no standout edge, so the pick comes down to the schedule slot";
+      note = r === t ? "<b>" + r.day + " " + (r.home ? "vs " : "@ ") + esc(r.opp) + " is the top projection:</b> " + esc(why) + "." :
+        "<b>" + r.day + " " + (r.home ? "vs " : "@ ") + esc(r.opp) + "</b> is within " + f1(t.proj - r.proj) + " pts of the top projection (" + t.day + " " + (t.home ? "vs " : "@ ") + esc(t.opp) + "). Holding the later game keeps you flexible while news comes in.";
+    }
+    html += '<p class="why">' + note + '</p></article>';
+  });
+  html += '</div>';
+  var bench = (D.myRoster.players || []).filter(function (p) { return ids.indexOf(p) < 0; });
+  if (bench.length) html += '<details class="benchbox"><summary>Bench and injured slot · ' + bench.length + ' players · no picks needed</summary><p class="hint">' + bench.map(function (p) { var q = D.dict[p] || {}; return esc((q.full_name || p) + " (" + (q.team || "?") + ")" + (q.injury_status ? " – " + q.injury_status : "")); }).join(" · ") + '</p></details>';
+  $("groups").innerHTML = html;
+  renderMatchup(); summary(); tonight();
+}
+function summary() {
+  var rec = 0, mine = 0, set = 0, n = 0;
+  (window.__infos || []).forEach(function (i) {
+    if (i.out || !i.rec) return; n++; rec += i.rec.proj;
+    var m = UI.picks[i.pid]; if (m) { set++; var g = i.rows.filter(function (x) { return x.gid === m; })[0]; if (g) mine += g.proj; }
+  });
+  $("sumRec").textContent = f1(rec); $("sumRecSub").textContent = "sum for " + n + " healthy starters, one game each";
+  $("sumMine").textContent = set ? f1(mine) : "–"; $("sumMineSub").textContent = set + " of " + n + " starters set";
+  $("sumDiff").textContent = set === n && n ? ((mine - rec >= 0 ? "+" : "") + f1(mine - rec)) : "–";
+}
+function tonight() {
+  var today = todayET(), infos = window.__infos || [];
+  var playing = infos.filter(function (i) { return i.rows.some(function (g) { return g.date === today && g.avail; }); });
+  var lock = infos.filter(function (i) { return !i.out && i.rec && i.rec.date === today; });
+  var el = $("tonight");
+  if (!playing.length) { el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = '<strong>' + playing.length + ' of your ' + infos.length + ' starters have a game today (' + dow(today) + ' ' + md(today) + ').</strong><p>' +
+    (lock.length ? 'Recommended to lock in today: ' + lock.map(function (i) { return esc(i.name) + " (" + (i.rec.home ? "vs " : "@ ") + esc(i.rec.opp) + ")"; }).join(", ") + '. ' : 'No starter is recommended on a game today. ') +
+    'A pick can no longer be changed once that game starts.</p>';
+}
+function savePicks() { lsSet("pw_picks_" + D.league.league_id + "_" + D.week, JSON.stringify(UI.picks)); }
+
+/* ---------- events ---------- */
+$("loginForm").addEventListener("submit", function (e) { e.preventDefault(); load($("u").value); });
+$("refresh").addEventListener("click", function () { load($("u").value); });
+document.addEventListener("click", function (e) {
+  var b = e.target.closest && e.target.closest(".game"); if (!b || b.disabled || !D) return;
+  var i = window.__infos[+b.dataset.p], g = i.rows[+b.dataset.g];
+  if (UI.picks[i.pid] === g.gid) delete UI.picks[i.pid]; else UI.picks[i.pid] = g.gid;
+  savePicks(); render();
 });
+document.addEventListener("change", function (e) {
+  var t = e.target; if (!D) return;
+  if (t.dataset && t.dataset.mu) { if (t.checked) delete UI.off[t.dataset.mu]; else UI.off[t.dataset.mu] = true; renderMatchup(); }
+  if (t.id === "mode") { UI.mode = t.value; render(); }
+  if (t.id === "risk") { UI.risk = t.checked; render(); }
+});
+document.addEventListener("input", function (e) { if (e.target.id === "margin" && D) { var m = parseFloat(e.target.value); if (!isNaN(m) && m >= 0) { UI.margin = m; render(); } } });
+$("useRec").addEventListener("click", function () { (window.__infos || []).forEach(function (i) { if (!i.out && i.rec) UI.picks[i.pid] = i.rec.gid; }); savePicks(); render(); });
+$("clearPicks").addEventListener("click", function () { UI.picks = {}; savePicks(); render(); });
 
-document.getElementById("risk").addEventListener("change", function (e) { RISK = e.target.checked; render(); });
-
-buildFields();
-render();
-renderMatchup();
+var saved = lsGet("pw_user"); $("u").value = saved || "";
+if (saved) load(saved);
+})();
 </script>
-
 </body>
 </html>
