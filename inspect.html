@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pickwise data inspector</title>
+<style>
+:root{--bg:#f3f5f8;--surface:#fff;--ink:#141a24;--muted:#5d6878;--line:#dbe0e8;--ok:#1a7f4b;--bad:#b42318;--accent:#d9480f}
+@media (prefers-color-scheme:dark){:root{--bg:#0e131b;--surface:#161d28;--ink:#eaeef4;--muted:#97a3b5;--line:#2a3445;--ok:#5fd39b;--bad:#ff8a80;--accent:#ff8a4c}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:20px max(16px,env(safe-area-inset-left))}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1{font-size:24px;margin:0}
+p{margin:0;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);min-width:0;flex:1 1 180px}
+button{font:inherit;font-weight:600;padding:8px 14px;border-radius:8px;border:0;background:var(--ink);color:var(--bg);cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button:disabled{opacity:.5;cursor:default}
+.item{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;grid-template-columns:24px 1fr;gap:2px 8px}
+.item b{font-weight:600}.item .d{grid-column:2;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.wait{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Pickwise data inspector</h1>
+  <p>Prints a few small samples of Sleeper's data so the app can be built to match. Nothing is sent anywhere except to Sleeper. No password is needed.</p>
+  <div class="row">
+    <input id="u" value="barburange13" aria-label="Sleeper username" autocapitalize="off" autocorrect="off">
+    <button id="go" type="button">Run inspector</button>
+  </div>
+  <textarea id="out" readonly rows="18" style="width:100%;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)"></textarea>
+  <div class="row"><button id="copy" class="ghost" type="button" disabled>Copy report</button><span id="msg" class="wait"></span></div>
+</div>
+<script>
+var API = "https://api.sleeper.app/v1", API2 = "https://api.sleeper.com", out = [];
+function log(t) { out.push(t); document.getElementById("out").value = out.join("\n"); }
+function cut(x, n) { var t = JSON.stringify(x); return t === undefined ? "undefined" : (t.length > n ? t.slice(0, n) + " ...(cut)" : t); }
+function get(url) { return fetch(url).then(function (r) { return r.json().catch(function () { return null; }); }).catch(function () { return null; }); }
+function run() {
+  var uname = document.getElementById("u").value.trim().toLowerCase();
+  out = []; document.getElementById("out").value = "running...";
+  document.getElementById("go").disabled = true; document.getElementById("copy").disabled = true;
+  var st, uid, lid, league, ros, mine, mus, dict, my3 = [], W;
+  get(API + "/state/nba").then(function (s) { st = s || {}; W = st.week || 5; log("STATE " + cut(st, 400));
+    return get(API + "/user/" + uname);
+  }).then(function (u) { uid = u && u.user_id; return get(API + "/user/" + uid + "/leagues/nba/" + (st.season || 2026));
+  }).then(function (ls) { lid = ls && ls[0] && ls[0].league_id; return get(API + "/league/" + lid);
+  }).then(function (l) { league = l || {}; log("LEAGUE name=" + league.name + " roster_positions=" + cut(league.roster_positions, 300) + " settings=" + cut(league.settings, 600));
+    log("SCORING " + cut(league.scoring_settings, 2000));
+    return get(API + "/league/" + lid + "/rosters");
+  }).then(function (r) { ros = r || []; mine = ros.filter(function (x) { return x.owner_id === uid; })[0] || {};
+    log("MY ROSTER " + cut(mine, 900)); my3 = (mine.players || []).slice(0, 3);
+    return get(API + "/league/" + lid + "/matchups/" + W);
+  }).then(function (m) { mus = m || [];
+    var me = mus.filter(function (x) { return x.roster_id === mine.roster_id; })[0] || {};
+    var op = mus.filter(function (x) { return x.matchup_id === me.matchup_id && x.roster_id !== me.roster_id; })[0] || {};
+    log("MY MATCHUP " + cut({ roster_id: me.roster_id, matchup_id: me.matchup_id, starters: me.starters, points: me.points }, 500));
+    log("OPPONENT MATCHUP " + cut({ roster_id: op.roster_id, matchup_id: op.matchup_id, starters: op.starters, players: op.players }, 700));
+    return get(API + "/players/nba");
+  }).then(function (d) { dict = d || {};
+    my3.forEach(function (id) { var p = dict[id] || {}; log("PLAYER " + id + " " + cut({ full_name: p.full_name, team: p.team, position: p.position, age: p.age, status: p.status, injury_status: p.injury_status, injury_body_part: p.injury_body_part, active: p.active }, 400)); });
+    return get(API2 + "/stats/nba/" + (st.season || 2026) + "/" + (W - 1) + "?season_type=regular");
+  }).then(function (s) { var arr = Array.isArray(s) ? s : [];
+    log("STATS week " + (W - 1) + ": " + arr.length + " items");
+    var one = arr.filter(function (x) { return my3.indexOf(String(x.player_id)) >= 0; })[0] || arr[0];
+    log("STATS SAMPLE " + cut(one, 1800));
+    return get(API2 + "/stats/nba/" + (st.season || 2026) + "/" + W + "?season_type=regular");
+  }).then(function (s) { var arr = Array.isArray(s) ? s : [];
+    log("STATS week " + W + ": " + arr.length + " items; first " + cut(arr[0], 900));
+    return get(API2 + "/schedule/nba/regular/" + (st.season || 2026));
+  }).then(function (s) { var arr = Array.isArray(s) ? s : [];
+    var wk = arr.filter(function (g) { return String(g.week) === String(W); });
+    log("SCHEDULE total " + arr.length + "; week " + W + " games: " + wk.length + "; sample " + cut(wk.slice(0, 3), 900));
+    return get(API2 + "/projections/nba/" + (st.season || 2026) + "/" + W + "?season_type=regular");
+  }).then(function (s) { var arr = Array.isArray(s) ? s : [];
+    var one = arr.filter(function (x) { return my3.indexOf(String(x.player_id)) >= 0; })[0] || arr[0];
+    log("PROJECTION SAMPLE " + cut(one, 1500));
+    log("DONE");
+    document.getElementById("go").disabled = false; document.getElementById("copy").disabled = false;
+  }).catch(function (e) { log("ERROR " + e); document.getElementById("go").disabled = false; });
+}
+document.getElementById("go").addEventListener("click", run);
+document.getElementById("copy").addEventListener("click", function () {
+  var t = document.getElementById("out").value, ta = document.getElementById("out");
+  var done = function () { document.getElementById("msg").textContent = "Copied. Paste it into the chat."; };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, function () { ta.select(); });
+  else ta.select();
+});
+</script>
+</body>
+</html>
