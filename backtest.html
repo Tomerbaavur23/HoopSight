@@ -205,6 +205,20 @@ function run(uname) {
       });
       perWeek.push({ w: w, tot: wkTot, n: counted });
     });
+    /* bias study on every player in the league's data, not just your starters */
+    var gameById = {}; d.sched.forEach(function (g) { gameById[String(g.game_id)] = g; });
+    var pairs = [];
+    weeks.forEach(function (wk) {
+      var pm = {}; (wk[2] || []).forEach(function (it) { if (it.player_id && it.game_id && it.stats) pm[String(it.player_id) + "|" + String(it.game_id)] = fpProj(it.stats, d.sc); });
+      wk[0].forEach(function (x) {
+        var sp = pm[x[0] + "|" + x[4]]; if (sp === undefined || sp < 8 || x[6] < 1) return;
+        var g = gameById[x[4]]; var team = x[3]; var home = g ? g.home.team === team : null;
+        var b2b = g && teamDates[team] ? !!teamDates[team][addDays(g.date, -1)] : null;
+        var age = (d.dict[x[0]] || {}).age || null;
+        pairs.push({ sp: sp, act: x[5], home: home, b2b: b2b, age: age });
+      });
+    });
+    d.pairs = pairs;
     if (!detail.length) throw new Error("No finished games found yet for your starters.");
     d.PR = PR; d.perWeek = perWeek; d.detail = detail; d.spErr = spErr; d.logs = logs;
     render(d);
@@ -212,6 +226,34 @@ function run(uname) {
   }).catch(function (e) { status("Could not run: " + (e && e.message || e), true); }).then(function () { $("go").disabled = false; });
 }
 
+function biasHtml(P) {
+  function grp(name, f) {
+    var a = P.filter(f); if (a.length < 30) return null;
+    var diffs = a.map(function (x) { return x.act - x.sp; }), m = mean(diffs);
+    var sdv = Math.sqrt(mean(diffs.map(function (x) { return (x - m) * (x - m); }))), se = sdv / Math.sqrt(a.length);
+    return { name: name, n: a.length, sp: mean(a.map(function (x) { return x.sp; })), act: mean(a.map(function (x) { return x.act; })), bias: m, se: se };
+  }
+  var rows = [
+    grp("All games", function () { return true; }),
+    grp("Projected under 15", function (x) { return x.sp < 15; }), grp("Projected 15 to 22", function (x) { return x.sp >= 15 && x.sp < 22; }),
+    grp("Projected 22 to 30", function (x) { return x.sp >= 22 && x.sp < 30; }), grp("Projected 30 or more", function (x) { return x.sp >= 30; }),
+    grp("Home games", function (x) { return x.home === true; }), grp("Away games", function (x) { return x.home === false; }),
+    grp("Back-to-back", function (x) { return x.b2b === true; }), grp("Rested (no game the day before)", function (x) { return x.b2b === false; }),
+    grp("Age under 25", function (x) { return x.age && x.age < 25; }), grp("Age 25 to 30", function (x) { return x.age && x.age >= 25 && x.age <= 30; }), grp("Age 31 and older", function (x) { return x.age && x.age > 30; })
+  ].filter(Boolean);
+  // calibration line: actual = a + b * projection
+  var mx = mean(P.map(function (x) { return x.sp; })), my = mean(P.map(function (x) { return x.act; }));
+  var sxy = 0, sxx = 0, syy = 0; P.forEach(function (x) { sxy += (x.sp - mx) * (x.act - my); sxx += (x.sp - mx) * (x.sp - mx); syy += (x.act - my) * (x.act - my); });
+  var slope = sxy / sxx, icpt = my - slope * mx, r2 = sxy * sxy / (sxx * syy);
+  var h = '<h2>Where Sleeper\'s projections are off</h2><div class="card tablewrap"><table><tr><th>Group</th><th>Games</th><th>Sleeper said</th><th>Actual</th><th>Actual minus projection</th></tr>';
+  rows.forEach(function (r) {
+    var sig = Math.abs(r.bias) > 2 * r.se, cls = sig ? (r.bias > 0 ? "pos" : "neg") : "";
+    h += '<tr><td>' + esc(r.name) + '</td><td>' + r.n + '</td><td>' + f1(r.sp) + '</td><td>' + f1(r.act) + '</td><td class="' + cls + '">' + (r.bias >= 0 ? "+" : "") + f1(r.bias) + (sig ? " ✓" : "") + '</td></tr>';
+  });
+  h += '</table></div><p class="note">Based on ' + P.length + ' games from every player with a projection of 8 or more, all finished weeks. A check mark means the gap is bigger than twice its margin of error, so it is probably real. Only games the player actually played are counted, so the overall gap runs positive: Sleeper\'s numbers already include the chance a player sits out. Look at the differences between groups, not the overall level.</p>';
+  h += '<div class="card"><b>Fitted line:</b> actual ≈ ' + f1(icpt) + ' + ' + slope.toFixed(2) + ' × Sleeper projection (R² ' + r2.toFixed(2) + '). A slope below 1 means high projections tend to be too high and low ones too low. Pickwise will only apply a correction once a gap like this is large and holds up across weeks.</div>';
+  return h;
+}
 function render(d) {
   // fair comparison: only player-weeks where every method has a value
   var full = d.detail.filter(function (r) { return r.sp != null && r.blend != null && r.mine != null; });
@@ -254,6 +296,7 @@ function render(d) {
     h += '<h2>Sleeper\'s projections</h2><div class="card"><div class="note">Sleeper did not return projections for the finished weeks, so they could not be tested. Pickwise is compared with the simple baselines only. Start saving projections each week and this can be tested properly later.</div></div>';
   }
 
+  if (d.pairs && d.pairs.length >= 100) h += biasHtml(d.pairs);
   h += '<h2>Player by player</h2><details><summary>Show all ' + d.detail.length + ' player-weeks</summary><div class="card tablewrap"><table><tr><th>Wk</th><th>Player</th><th>Games</th><th>Best</th><th>Yours</th><th>Pickwise</th><th>Sleeper</th><th>Avg</th></tr>';
   d.detail.slice().sort(function (a, b) { return a.w - b.w || (a.name < b.name ? -1 : 1); }).forEach(function (r) {
     function c(v) { return v == null ? "–" : f1(v); }
