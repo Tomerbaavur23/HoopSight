@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pickwise Backtest</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+:root{--bg:#f3f5f8;--surface:#fff;--ink:#141a24;--muted:#5d6878;--line:#dbe0e8;--accent:#d9480f;--accent-soft:#fdeee6;--ok:#1f7a4d;--ok-soft:#e6f4ec;--out:#b42318;
+--font-display:"Space Grotesk","Inter",system-ui,sans-serif;--font-body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e131b;--surface:#161d28;--ink:#eaeef4;--muted:#97a3b5;--line:#2a3445;--accent:#ff8a4c;--accent-soft:#2e1d14;--ok:#5fd39b;--ok-soft:#14291f;--out:#ff8a80;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--font-body)}
+main{max-width:860px;margin:0 auto;padding:20px 16px 48px}
+h1{font:700 26px/1.2 var(--font-display);margin:0 0 4px}
+h2{font:700 18px/1.3 var(--font-display);margin:28px 0 8px}
+p.sub{color:var(--muted);margin:0 0 16px}
+a{color:var(--accent)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:12px 0}
+form{display:flex;gap:8px;flex-wrap:wrap}
+input[type=text]{flex:1;min-width:160px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit}
+button{padding:10px 16px;border:0;border-radius:8px;background:var(--accent);color:#fff;font:600 15px var(--font-body);cursor:pointer}
+button:disabled{opacity:.5}
+.status{color:var(--muted);margin:10px 0}.status.err{color:var(--out)}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-weight:600;color:var(--muted);font-size:13px}
+tr.best td{background:var(--ok-soft);font-weight:600}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;min-width:90px}
+.bar i{display:block;height:100%;background:var(--accent)}
+.note{color:var(--muted);font-size:13.5px}
+details{margin:8px 0}summary{cursor:pointer;font-weight:600}
+.big{font:700 30px/1.1 var(--font-display)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.tile .l{color:var(--muted);font-size:13px}
+.pos{color:var(--ok)}.neg{color:var(--out)}
+</style>
+</head>
+<body>
+<main>
+<h1>Pickwise Backtest</h1>
+<p class="sub">For every past week of the season: which game would each method have picked for your starters, and how many fantasy points would that have scored? A game your player missed counts as 0.</p>
+<div class="card">
+<form id="f"><input type="text" id="u" placeholder="Sleeper username" autocomplete="off"><button id="go" type="submit">Run backtest</button></form>
+<div class="status" id="status"></div>
+</div>
+<div id="out" hidden></div>
+<p class="note">Everything is computed in your browser from Sleeper's public data. Nothing is sent anywhere else. This is a small sample, so treat differences of a point or two per player-week as noise.</p>
+</main>
+<script>
+(function () {
+var API = "https://api.sleeper.app/v1", API2 = "https://api.sleeper.com";
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+function f1(x) { return (Math.round(x * 10) / 10).toFixed(1); }
+function status(t, err) { var el = $("status"); el.textContent = t || ""; el.className = "status" + (err ? " err" : ""); }
+function jget(url) { return fetch(url).then(function (r) { if (!r.ok) throw new Error("Sleeper answered " + r.status + " for " + url.replace(/^https:\/\/[^/]+/, "")); return r.json(); }); }
+function mean(a) { return a.reduce(function (s, x) { return s + x; }, 0) / a.length; }
+function utc(iso) { return new Date(iso + "T00:00:00Z"); }
+function addDays(iso, n) { var d = utc(iso); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+
+function fpActual(st, sc) {
+  var n = function (k) { return +st[k] || 0; };
+  var s = n("pts") * (sc.pts || 0) + n("reb") * (sc.reb || 0) + n("ast") * (sc.ast || 0) + n("stl") * (sc.stl || 0) + n("blk") * (sc.blk || 0) +
+    n("to") * (sc.to || 0) + n("tpm") * (sc.tpm || 0) + n("ftm") * (sc.ftm || 0) + n("ff") * (sc.ff || 0) + n("tf") * (sc.tf || 0);
+  var c = 0; ["pts", "reb", "ast", "stl", "blk"].forEach(function (k) { if (n(k) >= 10) c++; });
+  if (c >= 2) s += sc.dd || 0;
+  if (c >= 3) s += sc.td || 0;
+  if (n("pts") >= 40) s += sc.bonus_pt_40p || 0;
+  if (n("pts") >= 50) s += sc.bonus_pt_50p || 0;
+  if (n("ast") >= 15) s += sc.bonus_ast_15p || 0;
+  if (n("reb") >= 20) s += sc.bonus_reb_20p || 0;
+  return s;
+}
+function fpProj(st, sc) {
+  var n = function (k) { return +st[k] || 0; };
+  return n("pts") * (sc.pts || 0) + n("reb") * (sc.reb || 0) + n("ast") * (sc.ast || 0) + n("stl") * (sc.stl || 0) + n("blk") * (sc.blk || 0) +
+    n("to") * (sc.to || 0) + n("tpm") * (sc.tpm || 0) + n("ftm") * (sc.ftm || 0) + n("dd") * (sc.dd || 0) + n("td") * (sc.td || 0);
+}
+// same compact format and cache key as the live app, so weeks already loaded there are reused
+function compactWeek(arr, sc) {
+  var out = [];
+  (arr || []).forEach(function (it) {
+    var pid = String(it.player_id || ""); if (!pid || pid.indexOf("TEAM") === 0) return;
+    var st = it.stats || {}; if (!(+st.min > 0)) return;
+    out.push([pid, it.date, it.opponent, it.team, String(it.game_id), Math.round(fpActual(st, sc) * 10) / 10, +st.min]);
+  });
+  return out;
+}
+function loadWeekStats(season, wk, sc) {
+  var key = "pw_stats_" + season + "_" + wk + "_" + JSON.stringify(sc).length;
+  var c = lsGet(key); if (c) { try { return Promise.resolve(JSON.parse(c)); } catch (e) {} }
+  return jget(API2 + "/stats/nba/" + season + "/" + wk + "?season_type=regular").then(function (arr) {
+    var comp = compactWeek(arr, sc); lsSet(key, JSON.stringify(comp)); return comp;
+  });
+}
+
+var METHODS = [
+  ["best", "Best game (hindsight)", "The ceiling: the highest-scoring game each week. Nobody can know this in advance."],
+  ["mine", "Your actual picks", "Worked out from the points Sleeper recorded for your starters."],
+  ["pw", "Pickwise model", "Season average so far, adjusted for home/away and back-to-backs. Uses only data from before that week."],
+  ["sp", "Sleeper's projections", "Picks the game Sleeper projected highest. Only counted for weeks where Sleeper still has projections."],
+  ["blend", "Pickwise + Sleeper blend", "Average of the two projections."],
+  ["first", "Always the first game", "Simple baseline."],
+  ["last", "Always the last game", "Simple baseline."],
+  ["avg", "Random game (average)", "What picking blindly would score on average."]
+];
+
+function run(uname) {
+  uname = uname.trim().toLowerCase(); if (!uname) return;
+  lsSet("pw_user", uname);
+  $("go").disabled = true; $("out").hidden = true;
+  var d = { user: uname };
+  status("Finding your account…");
+  return jget(API + "/state/nba").then(function (st) {
+    d.season = st.season || "2026"; d.week = st.week || st.leg || 1;
+    return jget(API + "/user/" + encodeURIComponent(uname));
+  }).then(function (u) {
+    if (!u || !u.user_id) throw new Error("No Sleeper user named " + uname);
+    d.uid = u.user_id;
+    return jget(API + "/user/" + d.uid + "/leagues/nba/" + d.season);
+  }).then(function (ls) {
+    if (!ls || !ls.length) throw new Error("No NBA leagues found for " + uname);
+    var saved = lsGet("pw_league"); var pick = ls.filter(function (l) { return l.league_id === saved; })[0] || ls[0];
+    d.league = pick; d.sc = pick.scoring_settings || null;
+    return (d.sc ? Promise.resolve() : jget(API + "/league/" + pick.league_id).then(function (l) { d.sc = l.scoring_settings || {}; }))
+      .then(function () { return jget(API + "/league/" + pick.league_id + "/rosters"); });
+  }).then(function (rs) {
+    var mine = rs.filter(function (x) { return x.owner_id === d.uid; })[0];
+    if (!mine) throw new Error("Could not find your team in this league");
+    d.rid = mine.roster_id;
+    if (d.week < 2) throw new Error("The season has no finished week yet. Come back after week 1 ends.");
+    status("Loading players and the schedule…");
+    return Promise.all([jget(API + "/players/nba"), jget(API2 + "/schedule/nba/regular/" + d.season)]);
+  }).then(function (r) {
+    d.dict = r[0]; d.sched = r[1] || [];
+    var jobs = [];
+    for (var w = 1; w < d.week; w++) (function (w) {
+      status("Loading week " + w + " of " + (d.week - 1) + "…");
+      jobs.push(Promise.all([
+        loadWeekStats(d.season, w, d.sc),
+        jget(API + "/league/" + d.league.league_id + "/matchups/" + w),
+        jget(API2 + "/projections/nba/" + d.season + "/" + w + "?season_type=regular").catch(function () { return []; })
+      ]));
+    })(w);
+    return Promise.all(jobs);
+  }).then(function (weeks) {
+    status("Crunching…");
+    var logs = {}, teamGames = {}, teamDates = {}, played = {};
+    weeks.forEach(function (wk) { wk[0].forEach(function (x) { (logs[x[0]] = logs[x[0]] || []).push({ date: x[1], team: x[3], gid: x[4], fp: x[5] }); played[x[0] + "|" + x[4]] = x[5]; }); });
+    Object.keys(logs).forEach(function (k) { logs[k].sort(function (a, b) { return a.date < b.date ? -1 : 1; }); });
+    d.sched.forEach(function (g) { [g.home.team, g.away.team].forEach(function (t) { (teamGames[t] = teamGames[t] || []).push(g); (teamDates[t] = teamDates[t] || {})[g.date] = 1; }); });
+    Object.keys(teamGames).forEach(function (t) { teamGames[t].sort(function (a, b) { return a.date < b.date ? -1 : 1; }); });
+
+    var PR = {}; METHODS.forEach(function (m) { PR[m[0]] = []; });
+    var perWeek = [], detail = [], spErr = [], spCount = 0, spMissing = 0;
+    weeks.forEach(function (wk, wi) {
+      var w = wi + 1, mu = wk[1].filter(function (x) { return x.roster_id === d.rid; })[0];
+      var projMap = {}; (wk[2] || []).forEach(function (it) { if (it.player_id && it.game_id && it.stats) projMap[String(it.player_id) + "|" + String(it.game_id)] = fpProj(it.stats, d.sc); });
+      var starters = (mu && mu.starters || []).filter(function (x) { return x && x !== "0"; });
+      var pp = (mu && mu.players_points) || {};
+      var wkTot = {}; METHODS.forEach(function (m) { wkTot[m[0]] = 0; });
+      var counted = 0;
+      starters.forEach(function (pid) {
+        var pl = d.dict[pid] || {}, lg = logs[pid] || [];
+        var team = (lg[lg.length - 1] || {}).team || pl.team; if (!team) return;
+        var games = (teamGames[team] || []).filter(function (g) { return String(g.week) === String(w); });
+        if (!games.length) return;
+        var firstDate = games[0].date, prior = lg.filter(function (x) { return x.date < firstDate; }).map(function (x) { return x.fp; });
+        var base = prior.length ? (prior.reduce(function (s, x) { return s + x; }, 0) + 18 * 2) / (prior.length + 2) : 16, age = pl.age || 27;
+        var rows = games.map(function (g, i) {
+          var home = g.home.team === team, b2b = !!(teamDates[team] && teamDates[team][addDays(g.date, -1)]);
+          var pw = base * (home ? 1.015 : 0.985) * (b2b ? (age >= 35 ? 0.90 : 0.97) : 1);
+          var sp = projMap[pid + "|" + g.game_id]; if (sp === undefined) sp = null;
+          var act = played[pid + "|" + g.game_id]; var did = act !== undefined; if (!did) act = 0;
+          return { i: i, date: g.date, opp: home ? g.away.team : g.home.team, home: home, pw: pw, sp: sp, act: act, did: did };
+        });
+        if (!rows.some(function (r) { return r.did; })) return; // out all week: every method scores 0, skip so it does not hide differences
+        counted++;
+        var hasSp = rows.every(function (r) { return r.sp != null; });
+        function chooseBy(key) { var b = rows[0]; rows.forEach(function (r) { if (key(r) > key(b)) b = r; }); return b; }
+        function rec(key) { var top = Math.max.apply(null, rows.map(key)); var c = rows.filter(function (r) { return key(r) >= top - 0.75; }); return c[c.length - 1]; }
+        var res = {};
+        res.best = chooseBy(function (r) { return r.act; });
+        res.first = rows[0]; res.last = rows[rows.length - 1];
+        res.pw = rec(function (r) { return r.pw; });
+        if (hasSp) { res.sp = chooseBy(function (r) { return r.sp; }); res.blend = rec(function (r) { return (r.pw + r.sp) / 2; }); }
+        else { res.sp = null; res.blend = null; }
+        var apts = pp[pid]; res.mine = null;
+        if (apts != null) { var m = rows.filter(function (r) { return r.did && Math.abs(r.act - apts) < 0.06; }); if (m.length === 1) res.mine = m[0]; else if (m.length > 1) { res.mine = m[0]; } else if (+apts === 0) res.mine = rows.filter(function (r) { return !r.did; })[0] || null; }
+        var avgv = mean(rows.map(function (r) { return r.act; }));
+        var line = { w: w, name: pl.full_name || pid, n: rows.length, best: res.best.act, avg: avgv };
+        METHODS.forEach(function (m) {
+          var k = m[0], v = null;
+          if (k === "avg") v = avgv; else if (res[k]) v = res[k].act;
+          line[k] = v; if (v != null) { PR[k].push(v); wkTot[k] += v; } else if (k === "sp" || k === "blend") { spMissing++; }
+        });
+        rows.forEach(function (r) { if (r.sp != null && r.did) { spErr.push(Math.abs(r.sp - r.act)); spCount++; } });
+        detail.push(line);
+      });
+      perWeek.push({ w: w, tot: wkTot, n: counted });
+    });
+    if (!detail.length) throw new Error("No finished games found yet for your starters.");
+    d.PR = PR; d.perWeek = perWeek; d.detail = detail; d.spErr = spErr; d.logs = logs;
+    render(d);
+    status("");
+  }).catch(function (e) { status("Could not run: " + (e && e.message || e), true); }).then(function () { $("go").disabled = false; });
+}
+
+function render(d) {
+  // fair comparison: only player-weeks where every method has a value
+  var full = d.detail.filter(function (r) { return r.sp != null && r.blend != null && r.mine != null; });
+  var useFull = full.length >= 10;
+  var pool = useFull ? full : d.detail;
+  var tot = {}, cnt = {};
+  METHODS.forEach(function (m) { var k = m[0]; var vals = pool.map(function (r) { return r[k]; }).filter(function (v) { return v != null; }); tot[k] = vals.length ? mean(vals) : null; cnt[k] = vals.length; });
+  var best = tot.best, h = "";
+  var cand = ["pw", "sp", "blend", "mine", "first", "last", "avg"].filter(function (k) { return tot[k] != null; });
+  var top = cand.reduce(function (a, k) { return tot[k] > tot[a] ? k : a; }, cand[0]);
+  var names = {}; METHODS.forEach(function (m) { names[m[0]] = m[1]; });
+  h += '<h2>The answer</h2><div class="tiles">';
+  h += '<div class="tile"><div class="l">Player-weeks tested</div><div class="big">' + pool.length + '</div><div class="note">weeks 1 to ' + (d.week - 1) + ', your starters</div></div>';
+  h += '<div class="tile"><div class="l">Best method</div><div class="big">' + esc(names[top]) + '</div><div class="note">' + f1(tot[top]) + ' pts per player-week</div></div>';
+  var edge = tot.pw - tot.avg;
+  h += '<div class="tile"><div class="l">Pickwise vs random game</div><div class="big ' + (edge >= 0 ? "pos" : "neg") + '">' + (edge >= 0 ? "+" : "") + f1(edge) + '</div><div class="note">pts per player-week, about ' + (edge >= 0 ? "+" : "") + f1(edge * 9) + ' per team-week</div></div>';
+  if (tot.mine != null) { var e2 = tot.mine - tot.avg; h += '<div class="tile"><div class="l">You vs random game</div><div class="big ' + (e2 >= 0 ? "pos" : "neg") + '">' + (e2 >= 0 ? "+" : "") + f1(e2) + '</div><div class="note">pts per player-week</div></div>'; }
+  h += '</div>';
+  if (!useFull) h += '<p class="note">Not every method could be scored for every player-week (Sleeper may no longer keep old projections, or a pick could not be matched), so each row below uses the player-weeks it has. Compare rows with that in mind.</p>';
+  h += '<h2>Every method, side by side</h2><div class="card tablewrap"><table><tr><th>Method</th><th>Pts / player-week</th><th>Per team-week</th><th>% of best</th><th>Tested</th><th></th></tr>';
+  METHODS.forEach(function (m) {
+    var k = m[0]; if (tot[k] == null) { h += '<tr><td title="' + esc(m[2]) + '">' + esc(m[1]) + '</td><td colspan="5" class="note" style="text-align:left">not available</td></tr>'; return; }
+    var pct = best ? tot[k] / best * 100 : 0;
+    h += '<tr' + (k === top ? ' class="best"' : '') + '><td title="' + esc(m[2]) + '">' + esc(m[1]) + '</td><td>' + f1(tot[k]) + '</td><td>' + f1(tot[k] * 9) + '</td><td>' + Math.round(pct) + '%</td><td>' + cnt[k] + '</td><td><div class="bar"><i style="width:' + Math.max(0, Math.min(100, pct)) + '%"></i></div></td></tr>';
+  });
+  h += '</table></div><p class="note">"Per team-week" assumes nine starters. The green row is the best method you can actually use (not hindsight).</p>';
+
+  h += '<h2>Week by week</h2><div class="card tablewrap"><table><tr><th>Week</th><th>Players</th><th>Best</th><th>Your picks</th><th>Pickwise</th><th>Sleeper</th><th>First</th><th>Last</th><th>Random</th></tr>';
+  d.perWeek.forEach(function (p) {
+    var rs = d.detail.filter(function (r) { return r.w === p.w; });
+    function c(k) { var v = rs.map(function (r) { return r[k]; }).filter(function (x) { return x != null; }); return v.length ? f1(mean(v)) : "–"; }
+    h += '<tr><td>Week ' + p.w + '</td><td>' + rs.length + '</td><td>' + c("best") + '</td><td>' + c("mine") + '</td><td>' + c("pw") + '</td><td>' + c("sp") + '</td><td>' + c("first") + '</td><td>' + c("last") + '</td><td>' + c("avg") + '</td></tr>';
+  });
+  h += '</table></div><p class="note">Average points per starter in that week. A dash means that method had no data.</p>';
+
+  if (d.spErr.length) {
+    var mae = mean(d.spErr);
+    h += '<h2>How accurate were Sleeper\'s projections?</h2><div class="card"><div class="big">' + f1(mae) + ' pts</div><div class="note">average miss per player-game over ' + d.spErr.length + ' games. A typical player scores roughly 20 to 25, so this is the size of the noise any pick has to beat.</div></div>';
+  } else {
+    h += '<h2>Sleeper\'s projections</h2><div class="card"><div class="note">Sleeper did not return projections for the finished weeks, so they could not be tested. Pickwise is compared with the simple baselines only. Start saving projections each week and this can be tested properly later.</div></div>';
+  }
+
+  h += '<h2>Player by player</h2><details><summary>Show all ' + d.detail.length + ' player-weeks</summary><div class="card tablewrap"><table><tr><th>Wk</th><th>Player</th><th>Games</th><th>Best</th><th>Yours</th><th>Pickwise</th><th>Sleeper</th><th>Avg</th></tr>';
+  d.detail.slice().sort(function (a, b) { return a.w - b.w || (a.name < b.name ? -1 : 1); }).forEach(function (r) {
+    function c(v) { return v == null ? "–" : f1(v); }
+    h += '<tr><td>' + r.w + '</td><td>' + esc(r.name) + '</td><td>' + r.n + '</td><td>' + c(r.best) + '</td><td>' + c(r.mine) + '</td><td>' + c(r.pw) + '</td><td>' + c(r.sp) + '</td><td>' + c(r.avg) + '</td></tr>';
+  });
+  h += '</table></div></details>';
+  $("out").innerHTML = h; $("out").hidden = false;
+  window.__bt = { tot: tot, cnt: cnt, n: pool.length, top: top };
+}
+
+$("f").addEventListener("submit", function (e) { e.preventDefault(); run($("u").value); });
+var s = lsGet("pw_user"); if (s) $("u").value = s;
+})();
+</script>
+</body>
+</html>
