@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pickwise Factor Lab</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+:root{--bg:#f3f5f8;--surface:#fff;--ink:#141a24;--muted:#5d6878;--line:#dbe0e8;--accent:#d9480f;--accent-soft:#fdeee6;--ok:#1f7a4d;--ok-soft:#e6f4ec;--out:#b42318;--warn:#a15c00;
+--font-display:"Space Grotesk","Inter",system-ui,sans-serif;--font-body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e131b;--surface:#161d28;--ink:#eaeef4;--muted:#97a3b5;--line:#2a3445;--accent:#ff8a4c;--accent-soft:#2e1d14;--ok:#5fd39b;--ok-soft:#14291f;--out:#ff8a80;--warn:#ffc266;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--font-body)}
+main{max-width:860px;margin:0 auto;padding:20px 16px 48px}
+h1{font:700 26px/1.2 var(--font-display);margin:0 0 4px}
+h2{font:700 18px/1.3 var(--font-display);margin:28px 0 8px}
+p.sub{color:var(--muted);margin:0 0 16px}
+a{color:var(--accent)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:12px 0}
+form{display:flex;gap:8px;flex-wrap:wrap}
+input[type=text]{flex:1;min-width:160px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit}
+button{padding:10px 16px;border:0;border-radius:8px;background:var(--accent);color:#fff;font:600 15px var(--font-body);cursor:pointer}
+button:disabled{opacity:.5}
+.status{color:var(--muted);margin:10px 0}.status.err{color:var(--out)}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-weight:600;color:var(--muted);font-size:13px}
+tr.best td{background:var(--ok-soft);font-weight:600}
+.note{color:var(--muted);font-size:13.5px}
+.big{font:700 28px/1.1 var(--font-display)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.tile .l{color:var(--muted);font-size:13px}
+.pos{color:var(--ok)}.neg{color:var(--out)}.mid{color:var(--warn)}
+.tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:12.5px;font-weight:600;background:var(--line);color:var(--ink)}
+.tag.yes{background:var(--ok-soft);color:var(--ok)}.tag.maybe{background:var(--accent-soft);color:var(--warn)}
+.fac{border-top:1px solid var(--line);padding:12px 0}.fac:first-child{border-top:0}
+.fac h3{font:600 16px/1.3 var(--font-body);margin:0 0 4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<main>
+<h1>Pickwise Factor Lab</h1>
+<p class="sub">Which of your own rules actually beats Sleeper's projection? For every finished game this season we compare what happened with what Sleeper projected, and check whether the opponent, the pace, a back-to-back or a missing teammate explains the gap.</p>
+<div class="card">
+<form id="f"><input type="text" id="u" placeholder="Sleeper username" autocomplete="off"><button id="go" type="submit">Run factor lab</button></form>
+<div class="status" id="status"></div>
+</div>
+<div id="out" hidden></div>
+<p class="note">Everything is computed in your browser from Sleeper's public data. With only a few weeks of games, treat anything without a check mark as unproven, and re-run every week as the sample grows.</p>
+</main>
+<script>
+(function () {
+var API = "https://api.sleeper.app/v1", API2 = "https://api.sleeper.com";
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+function f1(x) { return (Math.round(x * 10) / 10).toFixed(1); }
+function f2(x) { return (Math.round(x * 100) / 100).toFixed(2); }
+function sgn(x, f) { return (x >= 0 ? "+" : "") + (f || f1)(x); }
+function status(t, err) { var el = $("status"); el.textContent = t || ""; el.className = "status" + (err ? " err" : ""); }
+function jget(url) { return fetch(url).then(function (r) { if (!r.ok) throw new Error("Sleeper answered " + r.status + " for " + url.replace(/^https:\/\/[^/]+/, "")); return r.json(); }); }
+function mean(a) { return a.length ? a.reduce(function (s, x) { return s + x; }, 0) / a.length : 0; }
+function sd(a) { var m = mean(a); return Math.sqrt(mean(a.map(function (x) { return (x - m) * (x - m); }))); }
+function utc(iso) { return new Date(iso + "T00:00:00Z"); }
+function addDays(iso, n) { var d = utc(iso); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+
+function fpActual(st, sc) {
+  var n = function (k) { return +st[k] || 0; };
+  var s = n("pts") * (sc.pts || 0) + n("reb") * (sc.reb || 0) + n("ast") * (sc.ast || 0) + n("stl") * (sc.stl || 0) + n("blk") * (sc.blk || 0) +
+    n("to") * (sc.to || 0) + n("tpm") * (sc.tpm || 0) + n("ftm") * (sc.ftm || 0) + n("ff") * (sc.ff || 0) + n("tf") * (sc.tf || 0);
+  var c = 0; ["pts", "reb", "ast", "stl", "blk"].forEach(function (k) { if (n(k) >= 10) c++; });
+  if (c >= 2) s += sc.dd || 0;
+  if (c >= 3) s += sc.td || 0;
+  if (n("pts") >= 40) s += sc.bonus_pt_40p || 0;
+  if (n("pts") >= 50) s += sc.bonus_pt_50p || 0;
+  if (n("ast") >= 15) s += sc.bonus_ast_15p || 0;
+  if (n("reb") >= 20) s += sc.bonus_reb_20p || 0;
+  return s;
+}
+function fpProj(st, sc) {
+  var n = function (k) { return +st[k] || 0; };
+  return n("pts") * (sc.pts || 0) + n("reb") * (sc.reb || 0) + n("ast") * (sc.ast || 0) + n("stl") * (sc.stl || 0) + n("blk") * (sc.blk || 0) +
+    n("to") * (sc.to || 0) + n("tpm") * (sc.tpm || 0) + n("ftm") * (sc.ftm || 0) + n("dd") * (sc.dd || 0) + n("td") * (sc.td || 0);
+}
+// row: [pid, date, team, gid, fp, min, fga, fta, to, oreb]
+function compactWeek(arr, sc) {
+  var out = [];
+  (arr || []).forEach(function (it) {
+    var pid = String(it.player_id || ""); if (!pid || pid.indexOf("TEAM") === 0) return;
+    var st = it.stats || {}; if (!(+st.min > 0)) return;
+    var oreb = st.off_reb != null ? st.off_reb : (st.oreb != null ? st.oreb : (st.orb != null ? st.orb : 0));
+    out.push([pid, it.date, it.team, String(it.game_id), Math.round(fpActual(st, sc) * 10) / 10, +st.min, +st.fga || 0, +st.fta || 0, +st.to || 0, +oreb || 0]);
+  });
+  return out;
+}
+function loadWeekStats(season, wk, sc) {
+  var key = "pw_fx_" + season + "_" + wk + "_" + JSON.stringify(sc).length;
+  var c = lsGet(key); if (c) { try { return Promise.resolve(JSON.parse(c)); } catch (e) {} }
+  return jget(API2 + "/stats/nba/" + season + "/" + wk + "?season_type=regular").then(function (arr) {
+    var comp = compactWeek(arr, sc); lsSet(key, JSON.stringify(comp)); return comp;
+  });
+}
+
+/* ---------- small statistics toolkit ---------- */
+function olsSimple(xs, ys) {
+  var n = xs.length; if (n < 20) return null;
+  var mx = mean(xs), my = mean(ys), sxy = 0, sxx = 0, syy = 0;
+  for (var i = 0; i < n; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) * (xs[i] - mx); syy += (ys[i] - my) * (ys[i] - my); }
+  if (sxx <= 0) return null;
+  var b = sxy / sxx, a = my - b * mx, sse = Math.max(0, syy - b * sxy), s2 = sse / Math.max(1, n - 2);
+  return { n: n, b: b, a: a, t: b / Math.sqrt(s2 / sxx + 1e-12), sdx: Math.sqrt(sxx / n) };
+}
+function solve(A, b) { // gaussian elimination with partial pivoting
+  var n = b.length, M = A.map(function (r, i) { return r.concat([b[i]]); });
+  for (var c = 0; c < n; c++) {
+    var p = c; for (var r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    var tmp = M[c]; M[c] = M[p]; M[p] = tmp;
+    if (Math.abs(M[c][c]) < 1e-12) return null;
+    for (var r2 = c + 1; r2 < n; r2++) { var f = M[r2][c] / M[c][c]; for (var k = c; k <= n; k++) M[r2][k] -= f * M[c][k]; }
+  }
+  var x = new Array(n);
+  for (var i = n - 1; i >= 0; i--) { var s = M[i][n]; for (var j = i + 1; j < n; j++) s -= M[i][j] * x[j]; x[i] = s / M[i][i]; }
+  return x;
+}
+function olsMulti(X, y) { // X rows without intercept; returns [intercept, b1..bk]
+  var k = X[0].length + 1, XtX = [], Xty = [], i, j, r;
+  for (i = 0; i < k; i++) { XtX.push(new Array(k).fill(0)); Xty.push(0); }
+  for (r = 0; r < X.length; r++) {
+    var row = [1].concat(X[r]);
+    for (i = 0; i < k; i++) { Xty[i] += row[i] * y[r]; for (j = 0; j < k; j++) XtX[i][j] += row[i] * row[j]; }
+  }
+  for (i = 1; i < k; i++) XtX[i][i] += 1e-6;
+  return solve(XtX, Xty);
+}
+
+/* ---------- factor definitions ---------- */
+var FACTORS = [
+  { k: "allow", name: "Opponent has been giving up more than projected", flag: false, early: true, unit: "per 1 pt of opponent 'extra points allowed'",
+    how: "For the opposing team, we average (actual minus Sleeper's projection) for every player who faced them in earlier weeks. A positive number means their opponents tend to beat projections.", dir: "opponent_allows" },
+  { k: "pace", name: "Game pace (both teams' possessions per game)", flag: false, early: true, unit: "per 1 extra possession",
+    how: "Possessions are estimated from player box scores (shots, free throws, turnovers, offensive rebounds). The factor is the average of the two teams' pace, minus the league average.", dir: "pace" },
+  { k: "b2bP", name: "Your player's team is on a back-to-back", flag: true, early: true, unit: "back-to-back vs rested",
+    how: "The team also played the day before." },
+  { k: "b2bO", name: "The opponent is on a back-to-back", flag: true, early: true, unit: "opponent tired vs rested",
+    how: "The other team played the day before." },
+  { k: "absP", name: "Teammates who played last game but are out tonight", flag: false, early: false, unit: "per 1 fantasy point of missing teammates",
+    how: "Sum of the season-average fantasy points of regular teammates (18+ minutes last game) who did not play. Only known on game day, so it helps with the 'wait' decision, not the Monday plan." },
+  { k: "absO", name: "Opponent players who played last game but are out tonight", flag: false, early: false, unit: "per 1 fantasy point of missing opponents",
+    how: "Same idea for the other team. Known on game day." }
+];
+var EARLY = FACTORS.filter(function (f) { return f.early; }).map(function (f) { return f.k; });
+
+function run(uname) {
+  uname = uname.trim().toLowerCase(); if (!uname) return;
+  lsSet("pw_user", uname);
+  $("go").disabled = true; $("out").hidden = true;
+  var d = { user: uname };
+  status("Finding your account…");
+  return jget(API + "/state/nba").then(function (st) {
+    d.season = st.season || "2026"; d.week = st.week || st.leg || 1;
+    return jget(API + "/user/" + encodeURIComponent(uname));
+  }).then(function (u) {
+    if (!u || !u.user_id) throw new Error("No Sleeper user named " + uname);
+    d.uid = u.user_id;
+    return jget(API + "/user/" + d.uid + "/leagues/nba/" + d.season);
+  }).then(function (ls) {
+    if (!ls || !ls.length) throw new Error("No NBA leagues found for " + uname);
+    var saved = lsGet("pw_league"); var pick = ls.filter(function (l) { return l.league_id === saved; })[0] || ls[0];
+    d.sc = pick.scoring_settings || null;
+    if (d.week < 3) throw new Error("Not enough finished weeks yet. Come back after week 2 or 3 ends.");
+    status("Loading the schedule…");
+    return (d.sc ? Promise.resolve() : jget(API + "/league/" + pick.league_id).then(function (l) { d.sc = l.scoring_settings || {}; }))
+      .then(function () { return jget(API2 + "/schedule/nba/regular/" + d.season); });
+  }).then(function (sched) {
+    d.sched = sched || [];
+    var jobs = [];
+    for (var w = 1; w < d.week; w++) (function (w) {
+      jobs.push(Promise.all([
+        loadWeekStats(d.season, w, d.sc).then(function (r) { status("Loaded week " + w + " of " + (d.week - 1) + "…"); return r; }),
+        jget(API2 + "/projections/nba/" + d.season + "/" + w + "?season_type=regular").catch(function () { return []; })
+      ]));
+    })(w);
+    return Promise.all(jobs);
+  }).then(function (weeks) {
+    status("Crunching…");
+    analyse(d, weeks);
+    render(d);
+    status("");
+  }).catch(function (e) { status("Could not run: " + (e && e.message || e), true); }).then(function () { $("go").disabled = false; });
+}
+
+function analyse(d, weeks) {
+  var gameById = {}, wkStart = {}, teamDates = {};
+  d.sched.forEach(function (g) {
+    gameById[String(g.game_id)] = g;
+    if (!wkStart[g.week] || g.date < wkStart[g.week]) wkStart[g.week] = g.date;
+    [g.home.team, g.away.team].forEach(function (t) { (teamDates[t] = teamDates[t] || {})[g.date] = 1; });
+  });
+  var rowsByGame = {}, played = {}, playerRows = {}, anyFga = 0;
+  weeks.forEach(function (wk) {
+    wk[0].forEach(function (x) {
+      var gid = x[3]; (rowsByGame[gid] = rowsByGame[gid] || []).push(x);
+      played[x[0] + "|" + gid] = x;
+      (playerRows[x[0]] = playerRows[x[0]] || []).push(x);
+      anyFga += x[6];
+    });
+  });
+  d.hasPace = anyFga > 0;
+  // team game history with possessions
+  var teamHist = {}, allPace = [];
+  Object.keys(rowsByGame).forEach(function (gid) {
+    var g = gameById[gid]; if (!g) return;
+    var poss = {}; rowsByGame[gid].forEach(function (x) { poss[x[2]] = (poss[x[2]] || 0) + x[6] + 0.44 * x[7] + x[8] - x[9]; });
+    var tms = [g.home.team, g.away.team]; if (poss[tms[0]] == null || poss[tms[1]] == null) return;
+    var pace = (poss[tms[0]] + poss[tms[1]]) / 2;
+    allPace.push({ date: g.date, pace: pace });
+    tms.forEach(function (t) { (teamHist[t] = teamHist[t] || []).push({ gid: gid, date: g.date, pace: pace }); });
+  });
+  Object.keys(teamHist).forEach(function (t) { teamHist[t].sort(function (a, b) { return a.date < b.date ? -1 : 1; }); });
+
+  // pairs: every player-game that has a Sleeper projection and was played
+  var pairs = [], projAll = {};
+  weeks.forEach(function (wk, wi) {
+    (wk[1] || []).forEach(function (it) { if (it.player_id && it.game_id && it.stats) projAll[String(it.player_id) + "|" + String(it.game_id)] = fpProj(it.stats, d.sc); });
+  });
+  Object.keys(played).forEach(function (key) {
+    var x = played[key], sp = projAll[key]; if (sp === undefined || sp < 8 || x[5] < 1) return;
+    var g = gameById[x[3]]; if (!g) return;
+    var T = x[2], O = g.home.team === T ? g.away.team : g.home.team;
+    pairs.push({ w: +g.week, pid: x[0], gid: x[3], date: g.date, T: T, O: O, sp: sp, act: x[4], r: x[4] - sp });
+  });
+  d.nPairs = pairs.length;
+  var resAgainst = {};
+  pairs.forEach(function (p) { (resAgainst[p.O] = resAgainst[p.O] || []).push(p); });
+
+  function leagueMeanPace(cut) { var a = allPace.filter(function (z) { return z.date < cut; }); return a.length >= 8 ? mean(a.map(function (z) { return z.pace; })) : null; }
+  function teamPace(t, cut) { var a = (teamHist[t] || []).filter(function (z) { return z.date < cut; }); return a.length >= 3 ? mean(a.map(function (z) { return z.pace; })) : null; }
+  // factors known at the start of the game's week
+  function earlyFactors(T, O, g) {
+    var cut = wkStart[g.week] || g.date, x = {};
+    var arr = (resAgainst[O] || []).filter(function (p) { return p.date < cut; });
+    x.allow = arr.length >= 20 ? mean(arr.map(function (p) { return p.r; })) * arr.length / (arr.length + 40) : null;
+    var lp = leagueMeanPace(cut), pt = teamPace(T, cut), po = teamPace(O, cut);
+    x.pace = (d.hasPace && lp != null && pt != null && po != null) ? (pt + po) / 2 - lp : null;
+    x.b2bP = (teamDates[T] && teamDates[T][addDays(g.date, -1)]) ? 1 : 0;
+    x.b2bO = (teamDates[O] && teamDates[O][addDays(g.date, -1)]) ? 1 : 0;
+    return x;
+  }
+  // teammates who played the team's previous game (18+ min) but not this one
+  function absence(T, g) {
+    var hist = teamHist[T] || [], prev = null;
+    for (var i = 0; i < hist.length; i++) { if (hist[i].date < g.date) prev = hist[i]; }
+    if (!prev || !rowsByGame[String(g.game_id)]) return null;
+    var now = {}; rowsByGame[String(g.game_id)].forEach(function (x) { if (x[2] === T) now[x[0]] = 1; });
+    var tot = 0;
+    (rowsByGame[prev.gid] || []).forEach(function (x) {
+      if (x[2] !== T || x[5] < 18 || now[x[0]]) return;
+      var prior = (playerRows[x[0]] || []).filter(function (r) { return r[1] < g.date; });
+      tot += mean(prior.map(function (r) { return r[4]; }));
+    });
+    return tot;
+  }
+  pairs.forEach(function (p) {
+    var g = gameById[p.gid], x = earlyFactors(p.T, p.O, g);
+    x.absP = absence(p.T, g); x.absO = absence(p.O, g); p.x = x;
+  });
+  d.pairs = pairs;
+
+  /* ----- one table row per factor ----- */
+  d.results = FACTORS.map(function (F) {
+    var use = pairs.filter(function (p) { return p.x[F.k] != null; });
+    var res = { F: F, n: use.length };
+    if (use.length < 60) { res.none = true; return res; }
+    var xs = use.map(function (p) { return p.x[F.k]; }), ys = use.map(function (p) { return p.r; });
+    var fit = olsSimple(xs, ys); res.fit = fit;
+    // consistency across weeks
+    var wks = {}; use.forEach(function (p) { (wks[p.w] = wks[p.w] || []).push(p); });
+    var same = 0, tested = 0;
+    Object.keys(wks).forEach(function (w) {
+      var a = wks[w]; if (a.length < 30) return; var f2_ = olsSimple(a.map(function (p) { return p.x[F.k]; }), a.map(function (p) { return p.r; }));
+      if (!f2_) return; tested++; if (fit && Math.sign(f2_.b) === Math.sign(fit.b)) same++;
+    });
+    res.same = same; res.tested = tested;
+    // groups
+    var groups = [];
+    function grp(label, a) { if (a.length < 15) return; var rs = a.map(function (p) { return p.r; }), m = mean(rs); groups.push({ label: label, n: a.length, m: m, se: sd(rs) / Math.sqrt(a.length) }); }
+    if (F.flag) { grp("No", use.filter(function (p) { return p.x[F.k] === 0; })); grp("Yes", use.filter(function (p) { return p.x[F.k] === 1; })); }
+    else {
+      var sorted = use.slice().sort(function (a, b) { return a.x[F.k] - b.x[F.k]; }), t = Math.floor(sorted.length / 3);
+      var lo = sorted.slice(0, t), hi = sorted.slice(sorted.length - t), mi = sorted.slice(t, sorted.length - t);
+      var rg = function (a) { return f1(a[0].x[F.k]) + " to " + f1(a[a.length - 1].x[F.k]); };
+      if (F.k === "absP" || F.k === "absO") {
+        grp("Nobody missing", use.filter(function (p) { return p.x[F.k] === 0; }));
+        grp("Someone missing (under 30 fp)", use.filter(function (p) { return p.x[F.k] > 0 && p.x[F.k] < 30; }));
+        grp("Big absence (30+ fp)", use.filter(function (p) { return p.x[F.k] >= 30; }));
+      } else { grp("Lowest third (" + rg(lo) + ")", lo); grp("Middle third", mi); grp("Highest third (" + rg(hi) + ")", hi); }
+    }
+    res.groups = groups;
+    var sig = fit && Math.abs(fit.t) >= 2, cons = tested >= 2 && same >= Math.ceil(tested * 0.75);
+    res.verdict = !fit || groups.length < 2 ? "none" : (sig && cons ? "yes" : (Math.abs(fit.t) >= 1.5 ? "maybe" : "no"));
+    return res;
+  });
+
+  /* ----- pick test: leave one week out ----- */
+  var wkNums = Object.keys(wkStart).map(Number).filter(function (w) { return w < d.week; }).sort(function (a, b) { return a - b; });
+  var complete = pairs.filter(function (p) { return EARLY.every(function (k) { return p.x[k] != null; }); });
+  var tests = { sp: [], full: [], half: [], best: [], avg: [], diffFull: [], diffHalf: [] }, changed = 0, nPW = 0, betaAll = null;
+  betaAll = complete.length >= 200 ? olsMulti(complete.map(function (p) { return EARLY.map(function (k) { return p.x[k]; }); }), complete.map(function (p) { return p.r; })) : null;
+  wkNums.forEach(function (w) {
+    var train = complete.filter(function (p) { return p.w !== w; });
+    if (train.length < 200) return;
+    var beta = olsMulti(train.map(function (p) { return EARLY.map(function (k) { return p.x[k]; }); }), train.map(function (p) { return p.r; }));
+    if (!beta) return;
+    var pids = {}; pairs.forEach(function (p) { if (p.w === w) pids[p.pid] = p.T; });
+    Object.keys(pids).forEach(function (pid) {
+      var T = pids[pid];
+      var games = d.sched.filter(function (g) { return +g.week === w && (g.home.team === T || g.away.team === T); }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+      if (games.length < 2) return;
+      var rows = [], ok = true;
+      games.forEach(function (g) {
+        var key = pid + "|" + g.game_id, sp = projAll[key]; if (sp === undefined) { ok = false; return; }
+        var O = g.home.team === T ? g.away.team : g.home.team, x = earlyFactors(T, O, g);
+        if (!EARLY.every(function (k) { return x[k] != null; })) { ok = false; return; }
+        var pr = played[key], adj = 0; for (var i = 0; i < EARLY.length; i++) adj += beta[i + 1] * x[EARLY[i]];
+        rows.push({ sp: sp, adj: adj, act: pr ? pr[4] : 0 });
+      });
+      if (!ok || rows.length < 2 || mean(rows.map(function (r) { return r.sp; })) < 15) return;
+      function pick(f) { var b = rows[0]; rows.forEach(function (r) { if (f(r) > f(b) + 1e-9) b = r; }); return b; }
+      var a = pick(function (r) { return r.sp; }), bF = pick(function (r) { return r.sp + r.adj; }), bH = pick(function (r) { return r.sp + 0.5 * r.adj; });
+      var bestR = pick(function (r) { return r.act; });
+      tests.sp.push(a.act); tests.full.push(bF.act); tests.half.push(bH.act); tests.best.push(bestR.act); tests.avg.push(mean(rows.map(function (r) { return r.act; })));
+      tests.diffFull.push(bF.act - a.act); tests.diffHalf.push(bH.act - a.act);
+      if (bF !== a) changed++; nPW++;
+    });
+  });
+  d.pick = { n: nPW, changed: changed, m: {}, diffFull: tests.diffFull, diffHalf: tests.diffHalf };
+  ["sp", "full", "half", "best", "avg"].forEach(function (k) { d.pick.m[k] = tests[k].length ? mean(tests[k]) : null; });
+  d.beta = betaAll;
+}
+
+function render(d) {
+  var h = "";
+  var yes = d.results.filter(function (r) { return r.verdict === "yes"; }).length;
+  h += '<h2>The answer</h2><div class="tiles">';
+  h += '<div class="tile"><div class="l">Player-games analysed</div><div class="big">' + d.nPairs + '</div><div class="note">weeks 1 to ' + (d.week - 1) + ', all players with a projection of 8+</div></div>';
+  h += '<div class="tile"><div class="l">Factors that look real</div><div class="big ' + (yes ? "pos" : "") + '">' + yes + ' of ' + d.results.length + '</div><div class="note">strong signal and the same direction in most weeks</div></div>';
+  if (d.pick && d.pick.n >= 20) {
+    var df = d.pick.diffFull, dm = mean(df), se = sd(df) / Math.sqrt(df.length);
+    h += '<div class="tile"><div class="l">Adjusted picks vs Sleeper picks</div><div class="big ' + (dm > 0 && dm > 2 * se ? "pos" : "") + '">' + sgn(dm) + '</div><div class="note">points per player-week, ± ' + f1(se) + ' margin</div></div>';
+  }
+  h += '</div>';
+  if (!d.hasPace) h += '<p class="note">Sleeper did not return shot and turnover data, so the pace factor could not be computed.</p>';
+
+  h += '<h2>Factor by factor</h2><div class="card">';
+  d.results.forEach(function (r) {
+    var F = r.F;
+    h += '<div class="fac"><h3>' + esc(F.name) + ' ' + (r.none || r.verdict === "none" ? '<span class="tag">not enough variety yet</span>' : (r.verdict === "yes" ? '<span class="tag yes">looks real</span>' : (r.verdict === "maybe" ? '<span class="tag maybe">maybe</span>' : '<span class="tag">no sign</span>'))) + '</h3>';
+    h += '<div class="note">' + esc(F.how) + '</div>';
+    if (!r.none && r.verdict === "none") {
+      h += '<div class="note">All ' + r.n + ' games fall in one group so far (for example, no back-to-backs yet), so this cannot be tested. It will fill in as the season goes on.</div>';
+    } else if (!r.none) {
+      var fit = r.fit;
+      h += '<div class="tablewrap"><table><tr><th>Group</th><th>Games</th><th>Actual minus projection</th></tr>';
+      r.groups.forEach(function (g) {
+        var sig = Math.abs(g.m) > 2 * g.se, cls = sig ? (g.m > 0 ? "pos" : "neg") : "";
+        h += '<tr><td>' + esc(g.label) + '</td><td>' + g.n + '</td><td class="' + cls + '">' + sgn(g.m) + ' ± ' + f1(g.se) + (sig ? " ✓" : "") + '</td></tr>';
+      });
+      h += '</table></div>';
+      if (fit) h += '<div class="note">Effect: ' + sgn(fit.b, f2) + ' points of error ' + esc(F.unit) + ' (t = ' + f1(fit.t) + '). Same direction in ' + r.same + ' of ' + r.tested + ' weeks.</div>';
+    } else h += '<div class="note">Only ' + r.n + ' usable games so far.</div>';
+    h += '</div>';
+  });
+  h += '</div><p class="note">"Actual minus projection": positive means players did better than Sleeper expected in that group. The check mark means the gap is bigger than twice its margin of error.</p>';
+
+  if (d.pick && d.pick.n >= 20) {
+    var P = d.pick, rowsT = [["Best game (hindsight)", "best"], ["Pickwise with all factors", "full"], ["Pickwise with half-strength factors", "half"], ["Sleeper's projection alone", "sp"], ["Random game", "avg"]];
+    h += '<h2>The real test: would it have picked better games?</h2><div class="card tablewrap"><table><tr><th>Method</th><th>Pts per player-week</th></tr>';
+    rowsT.forEach(function (r) { h += '<tr' + (r[1] === "full" ? ' class="best"' : '') + '><td>' + r[0] + '</td><td>' + f1(P.m[r[1]]) + '</td></tr>'; });
+    var dh = mean(P.diffHalf), seh = sd(P.diffHalf) / Math.sqrt(P.diffHalf.length);
+    h += '</table></div><p class="note">' + P.n + ' player-weeks (players with 2+ games and a projection of 15+). Each week was tested with factors fitted only on the other weeks, so the model never saw the week it was judged on. Factors changed the pick in ' + P.changed + ' cases. Half-strength vs Sleeper alone: ' + sgn(dh) + ' ± ' + f1(seh) + '. If the margin is as large as the gain, it is noise. Only the factors known on Monday are used here (opponent, pace, back-to-backs); the missing-player factors are for game-day decisions.</p>';
+  } else {
+    h += '<h2>The real test</h2><div class="card note">Not enough weeks with projections to run the pick test yet.</div>';
+  }
+  if (d.beta) h += '<details><summary>Fitted adjustments (for the live app)</summary><div class="card note">Intercept ' + f2(d.beta[0]) + '; ' + EARLY.map(function (k, i) { return k + ' ' + f2(d.beta[i + 1]); }).join('; ') + '</div></details>';
+  $("out").innerHTML = h; $("out").hidden = false;
+  window.__fx = { results: d.results.map(function (r) { return { k: r.F.k, n: r.n, verdict: r.verdict, b: r.fit ? r.fit.b : null, t: r.fit ? r.fit.t : null }; }), pick: d.pick, nPairs: d.nPairs };
+}
+
+$("f").addEventListener("submit", function (e) { e.preventDefault(); run($("u").value); });
+var s = lsGet("pw_user"); if (s) $("u").value = s;
+})();
+</script>
+</body>
+</html>
