@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Pickwise</title>
+<title>Hoopsight</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
@@ -191,7 +191,7 @@ table.mu input[type="checkbox"] { margin-top: 3px; accent-color: var(--accent); 
 <body>
 <div class="wrap">
   <header class="top">
-    <h1 class="brand">Pickwise<small id="leagueName">Weekly game picks for your Sleeper league</small></h1>
+    <h1 class="brand">Hoopsight<small id="leagueName">Weekly game picks for your Sleeper league</small></h1>
     <span class="weekpill" id="weekpill">Not loaded</span>
   </header>
 
@@ -226,8 +226,8 @@ table.mu input[type="checkbox"] { margin-top: 3px; accent-color: var(--accent); 
           <label class="field" for="mode">Projection source
             <select id="mode">
               <option value="sl">Sleeper (recommended)</option>
-              <option value="blend">Blend: Pickwise and Sleeper</option>
-              <option value="pw">Pickwise only</option>
+              <option value="blend">Blend: Hoopsight and Sleeper</option>
+              <option value="pw">Hoopsight only</option>
             </select></label>
           <label class="field" for="strat">Pick strategy
             <select id="strat">
@@ -237,7 +237,7 @@ table.mu input[type="checkbox"] { margin-top: 3px; accent-color: var(--accent); 
           <label class="field" for="margin">Prefer a later game if within (pts)
             <input id="margin" type="number" step="0.25" min="0" value="0"></label>
         </div>
-        <p class="hint"><b>Projection source.</b> Sleeper's own per-game projection is the base: in the backtest it beat both a random game and the Pickwise average-based model. <b>Play the matchup</b> starts from those projections and then adjusts picks for your matchup: it counts each game's chance that the player misses it, and when you are the favorite it prefers steadier games, when you are the underdog it accepts more risk for a higher ceiling. It also uses points already locked in this week. <b>Max expected points</b> simply takes the highest projection. The page shows your win chance under both, so you can see what the strategy changes. The miss-risk part is a model, not something proven on a large sample yet.</p>
+        <p class="hint"><b>Projection source.</b> Sleeper's own per-game projection is the base: in the backtest it beat both a random game and the Hoopsight average-based model. <b>Play the matchup</b> starts from those projections and then adjusts picks for your matchup: it counts each game's chance that the player misses it, and when you are the favorite it prefers steadier games, when you are the underdog it accepts more risk for a higher ceiling. It also uses points already locked in this week. <b>Max expected points</b> simply takes the highest projection. The page shows your win chance under both, so you can see what the strategy changes. The miss-risk part is a model, not something proven on a large sample yet.</p>
       </div>
     </details>
 
@@ -415,7 +415,7 @@ function rowsFor(pid) {
     if (UI.strat) { val = v * (1 - mp); vr = (1 - mp) * sg * sg + mp * (1 - mp) * v * v; }
     var why = [];
     if (b2b) why.push("second night of a back-to-back");
-    if (sp != null && UI.mode !== "sl" && Math.abs(sp - pw) >= 2) why.push("Sleeper projects " + f1(sp) + " and Pickwise " + f1(pw));
+    if (sp != null && UI.mode !== "sl" && Math.abs(sp - pw) >= 2) why.push("Sleeper projects " + f1(sp) + " and Hoopsight " + f1(pw));
     if (UI.strat && mp >= 0.12) why.push("about " + Math.round(mp * 100) + "% chance he sits this one out");
     return { gid: String(g.game_id), date: g.date, day: dow(g.date), opp: opp, home: home, b2b: b2b, pw: pw, sp: sp, proj: v, val: val, vr: vr, mp: mp, why: why, avail: g.status === "pre_game" && g.date >= today, idx: i };
   });
@@ -567,7 +567,7 @@ function checkAlerts(infos) {
   var all = news.concat(getAlerts()).slice(0, 30);
   if (news.length) lsSet(alertKey(), JSON.stringify(all));
   renderAlerts(all);
-  if (news.length && window.Notification && Notification.permission === "granted" && document.hidden) { try { new Notification("Pickwise: " + news.length + " change" + (news.length > 1 ? "s" : ""), { body: news.map(function (n) { return n.m; }).join("\n") }); } catch (e) {} }
+  if (news.length && window.Notification && Notification.permission === "granted" && document.hidden) { try { new Notification("Hoopsight: " + news.length + " change" + (news.length > 1 ? "s" : ""), { body: news.map(function (n) { return n.m; }).join("\n") }); } catch (e) {} }
 }
 function renderAlerts(list) {
   var el = $("alerts"); list = list || getAlerts();

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Pickwise Factor Lab</title>
+<title>Hoopsight Factor Lab</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
 <style>
 :root{--bg:#f3f5f8;--surface:#fff;--ink:#141a24;--muted:#5d6878;--line:#dbe0e8;--accent:#d9480f;--accent-soft:#fdeee6;--ok:#1f7a4d;--ok-soft:#e6f4ec;--out:#b42318;--warn:#a15c00;
@@ -42,7 +42,7 @@ tr.best td{background:var(--ok-soft);font-weight:600}
 </head>
 <body>
 <main>
-<h1>Pickwise Factor Lab</h1>
+<h1>Hoopsight Factor Lab</h1>
 <p class="sub">Which of your own rules actually beats Sleeper's projection? For every finished game this season we compare what happened with what Sleeper projected, and check whether the opponent, the pace, a back-to-back or a missing teammate explains the gap.</p>
 <div class="card">
 <form id="f"><input type="text" id="u" placeholder="Sleeper username" autocomplete="off"><button id="go" type="submit">Run factor lab</button></form>
@@ -377,7 +377,7 @@ function render(d) {
   h += '</div><p class="note">"Actual minus projection": positive means players did better than Sleeper expected in that group. The check mark means the gap is bigger than twice its margin of error.</p>';
 
   if (d.pick && d.pick.n >= 20) {
-    var P = d.pick, rowsT = [["Best game (hindsight)", "best"], ["Pickwise with all factors", "full"], ["Pickwise with half-strength factors", "half"], ["Sleeper's projection alone", "sp"], ["Random game", "avg"]];
+    var P = d.pick, rowsT = [["Best game (hindsight)", "best"], ["Hoopsight with all factors", "full"], ["Hoopsight with half-strength factors", "half"], ["Sleeper's projection alone", "sp"], ["Random game", "avg"]];
     h += '<h2>The real test: would it have picked better games?</h2><div class="card tablewrap"><table><tr><th>Method</th><th>Pts per player-week</th></tr>';
     rowsT.forEach(function (r) { h += '<tr' + (r[1] === "full" ? ' class="best"' : '') + '><td>' + r[0] + '</td><td>' + f1(P.m[r[1]]) + '</td></tr>'; });
     var dh = mean(P.diffHalf), seh = sd(P.diffHalf) / Math.sqrt(P.diffHalf.length);

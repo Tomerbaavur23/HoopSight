@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Pickwise Backtest</title>
+<title>Hoopsight Backtest</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap">
 <style>
 :root{--bg:#f3f5f8;--surface:#fff;--ink:#141a24;--muted:#5d6878;--line:#dbe0e8;--accent:#d9480f;--accent-soft:#fdeee6;--ok:#1f7a4d;--ok-soft:#e6f4ec;--out:#b42318;
@@ -41,7 +41,7 @@ details{margin:8px 0}summary{cursor:pointer;font-weight:600}
 </head>
 <body>
 <main>
-<h1>Pickwise Backtest</h1>
+<h1>Hoopsight Backtest</h1>
 <p class="sub">For every past week of the season: which game would each method have picked for your starters, and how many fantasy points would that have scored? A game your player missed counts as 0.</p>
 <div class="card">
 <form id="f"><input type="text" id="u" placeholder="Sleeper username" autocomplete="off"><button id="go" type="submit">Run backtest</button></form>
@@ -103,9 +103,9 @@ function loadWeekStats(season, wk, sc) {
 var METHODS = [
   ["best", "Best game (hindsight)", "The ceiling: the highest-scoring game each week. Nobody can know this in advance."],
   ["mine", "Your actual picks", "Worked out from the points Sleeper recorded for your starters."],
-  ["pw", "Pickwise model", "Season average so far, adjusted for home/away and back-to-backs. Uses only data from before that week."],
+  ["pw", "Hoopsight model", "Season average so far, adjusted for home/away and back-to-backs. Uses only data from before that week."],
   ["sp", "Sleeper's projections", "Picks the game Sleeper projected highest. Only counted for weeks where Sleeper still has projections."],
-  ["blend", "Pickwise + Sleeper blend", "Average of the two projections."],
+  ["blend", "Hoopsight + Sleeper blend", "Average of the two projections."],
   ["first", "Always the first game", "Simple baseline."],
   ["last", "Always the last game", "Simple baseline."],
   ["avg", "Random game (average)", "What picking blindly would score on average."]
@@ -251,7 +251,7 @@ function biasHtml(P) {
     h += '<tr><td>' + esc(r.name) + '</td><td>' + r.n + '</td><td>' + f1(r.sp) + '</td><td>' + f1(r.act) + '</td><td class="' + cls + '">' + (r.bias >= 0 ? "+" : "") + f1(r.bias) + (sig ? " ✓" : "") + '</td></tr>';
   });
   h += '</table></div><p class="note">Based on ' + P.length + ' games from every player with a projection of 8 or more, all finished weeks. A check mark means the gap is bigger than twice its margin of error, so it is probably real. Only games the player actually played are counted, so the overall gap runs positive: Sleeper\'s numbers already include the chance a player sits out. Look at the differences between groups, not the overall level.</p>';
-  h += '<div class="card"><b>Fitted line:</b> actual ≈ ' + f1(icpt) + ' + ' + slope.toFixed(2) + ' × Sleeper projection (R² ' + r2.toFixed(2) + '). A slope below 1 means high projections tend to be too high and low ones too low. Pickwise will only apply a correction once a gap like this is large and holds up across weeks.</div>';
+  h += '<div class="card"><b>Fitted line:</b> actual ≈ ' + f1(icpt) + ' + ' + slope.toFixed(2) + ' × Sleeper projection (R² ' + r2.toFixed(2) + '). A slope below 1 means high projections tend to be too high and low ones too low. Hoopsight will only apply a correction once a gap like this is large and holds up across weeks.</div>';
   return h;
 }
 function render(d) {
@@ -269,7 +269,7 @@ function render(d) {
   h += '<div class="tile"><div class="l">Player-weeks tested</div><div class="big">' + pool.length + '</div><div class="note">weeks 1 to ' + (d.week - 1) + ', your starters</div></div>';
   h += '<div class="tile"><div class="l">Best method</div><div class="big">' + esc(names[top]) + '</div><div class="note">' + f1(tot[top]) + ' pts per player-week</div></div>';
   var edge = tot.pw - tot.avg;
-  h += '<div class="tile"><div class="l">Pickwise vs random game</div><div class="big ' + (edge >= 0 ? "pos" : "neg") + '">' + (edge >= 0 ? "+" : "") + f1(edge) + '</div><div class="note">pts per player-week, about ' + (edge >= 0 ? "+" : "") + f1(edge * 9) + ' per team-week</div></div>';
+  h += '<div class="tile"><div class="l">Hoopsight vs random game</div><div class="big ' + (edge >= 0 ? "pos" : "neg") + '">' + (edge >= 0 ? "+" : "") + f1(edge) + '</div><div class="note">pts per player-week, about ' + (edge >= 0 ? "+" : "") + f1(edge * 9) + ' per team-week</div></div>';
   if (tot.mine != null) { var e2 = tot.mine - tot.avg; h += '<div class="tile"><div class="l">You vs random game</div><div class="big ' + (e2 >= 0 ? "pos" : "neg") + '">' + (e2 >= 0 ? "+" : "") + f1(e2) + '</div><div class="note">pts per player-week</div></div>'; }
   h += '</div>';
   if (!useFull) h += '<p class="note">Not every method could be scored for every player-week (Sleeper may no longer keep old projections, or a pick could not be matched), so each row below uses the player-weeks it has. Compare rows with that in mind.</p>';
@@ -281,7 +281,7 @@ function render(d) {
   });
   h += '</table></div><p class="note">"Per team-week" assumes nine starters. The green row is the best method you can actually use (not hindsight).</p>';
 
-  h += '<h2>Week by week</h2><div class="card tablewrap"><table><tr><th>Week</th><th>Players</th><th>Best</th><th>Your picks</th><th>Pickwise</th><th>Sleeper</th><th>First</th><th>Last</th><th>Random</th></tr>';
+  h += '<h2>Week by week</h2><div class="card tablewrap"><table><tr><th>Week</th><th>Players</th><th>Best</th><th>Your picks</th><th>Hoopsight</th><th>Sleeper</th><th>First</th><th>Last</th><th>Random</th></tr>';
   d.perWeek.forEach(function (p) {
     var rs = d.detail.filter(function (r) { return r.w === p.w; });
     function c(k) { var v = rs.map(function (r) { return r[k]; }).filter(function (x) { return x != null; }); return v.length ? f1(mean(v)) : "–"; }
@@ -293,11 +293,11 @@ function render(d) {
     var mae = mean(d.spErr);
     h += '<h2>How accurate were Sleeper\'s projections?</h2><div class="card"><div class="big">' + f1(mae) + ' pts</div><div class="note">average miss per player-game over ' + d.spErr.length + ' games. A typical player scores roughly 20 to 25, so this is the size of the noise any pick has to beat.</div></div>';
   } else {
-    h += '<h2>Sleeper\'s projections</h2><div class="card"><div class="note">Sleeper did not return projections for the finished weeks, so they could not be tested. Pickwise is compared with the simple baselines only. Start saving projections each week and this can be tested properly later.</div></div>';
+    h += '<h2>Sleeper\'s projections</h2><div class="card"><div class="note">Sleeper did not return projections for the finished weeks, so they could not be tested. Hoopsight is compared with the simple baselines only. Start saving projections each week and this can be tested properly later.</div></div>';
   }
 
   if (d.pairs && d.pairs.length >= 100) h += biasHtml(d.pairs);
-  h += '<h2>Player by player</h2><details><summary>Show all ' + d.detail.length + ' player-weeks</summary><div class="card tablewrap"><table><tr><th>Wk</th><th>Player</th><th>Games</th><th>Best</th><th>Yours</th><th>Pickwise</th><th>Sleeper</th><th>Avg</th></tr>';
+  h += '<h2>Player by player</h2><details><summary>Show all ' + d.detail.length + ' player-weeks</summary><div class="card tablewrap"><table><tr><th>Wk</th><th>Player</th><th>Games</th><th>Best</th><th>Yours</th><th>Hoopsight</th><th>Sleeper</th><th>Avg</th></tr>';
   d.detail.slice().sort(function (a, b) { return a.w - b.w || (a.name < b.name ? -1 : 1); }).forEach(function (r) {
     function c(v) { return v == null ? "–" : f1(v); }
     h += '<tr><td>' + r.w + '</td><td>' + esc(r.name) + '</td><td>' + r.n + '</td><td>' + c(r.best) + '</td><td>' + c(r.mine) + '</td><td>' + c(r.pw) + '</td><td>' + c(r.sp) + '</td><td>' + c(r.avg) + '</td></tr>';
